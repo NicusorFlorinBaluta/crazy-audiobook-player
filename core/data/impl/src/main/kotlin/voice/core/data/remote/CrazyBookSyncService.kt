@@ -126,7 +126,14 @@ public class CrazyBookSyncService(
             chapterIds.add(chId)
             val durationMs = ((ch.durationSeconds ?: 0.0) * 1000.0).toLong()
             val finalDuration = if (durationMs > 0) durationMs else 60_000L
-            val chTitle = ch.title.ifBlank { "Chapter ${ch.number}" }
+
+            val rawTitle = ch.title.trim()
+            val chTitle = when {
+              rawTitle.isBlank() -> "Chapter ${ch.number}"
+              rawTitle.equals("Chapter ${ch.number}", ignoreCase = true) -> rawTitle
+              rawTitle.startsWith("Chapter ${ch.number}:", ignoreCase = true) || rawTitle.startsWith("Chapter ${ch.number} -", ignoreCase = true) -> rawTitle
+              else -> "Chapter ${ch.number}: $rawTitle"
+            }
 
             val marks = listOf(
               MarkData(
@@ -161,7 +168,14 @@ public class CrazyBookSyncService(
             for (ch in allChapters) {
               val dur = ((ch.durationSeconds ?: 0.0) * 1000.0).toLong()
               val startMs = ch.startMs ?: cumMs
-              marks.add(MarkData(name = ch.title.ifBlank { "Chapter ${ch.number}" }, startMs = startMs))
+              val rawTitle = ch.title.trim()
+              val markTitle = when {
+                rawTitle.isBlank() -> "Chapter ${ch.number}"
+                rawTitle.equals("Chapter ${ch.number}", ignoreCase = true) -> rawTitle
+                rawTitle.startsWith("Chapter ${ch.number}:", ignoreCase = true) || rawTitle.startsWith("Chapter ${ch.number} -", ignoreCase = true) -> rawTitle
+                else -> "Chapter ${ch.number}: $rawTitle"
+              }
+              marks.add(MarkData(name = markTitle, startMs = startMs))
               cumMs = (ch.endMs ?: (startMs + if (dur > 0) dur else 60_000L))
             }
           } else {
@@ -249,6 +263,20 @@ public class CrazyBookSyncService(
         syncCount++
       }
 
+      // Mark any remote books as inactive if they no longer exist in the server catalog
+      val validRemoteBookIds = catalog.map { BookId("crazy://${it.projectId}") }.toSet()
+      val allBooks = bookContentRepo.all()
+      for (b in allBooks) {
+        if (b.id.value.startsWith("crazy://") && b.id !in validRemoteBookIds) {
+          if (b.isActive) {
+            bookContentRepo.put(b.copy(isActive = false))
+          }
+          try {
+            b.cover?.delete()
+          } catch (_: Exception) {}
+        }
+      }
+
       syncCount
     }
   }
@@ -298,83 +326,64 @@ public class CrazyBookSyncService(
       val api = clientFactory.create(serverUrl)
       val okHttpClient = clientFactory.createOkHttpClient(serverUrl)
 
-      val detail = api.getBookDetail(projectId).body()
-        ?: throw IllegalStateException("Cannot fetch book details for $projectId")
+      val detailResp = api.getBookDetail(projectId)
+      if (!detailResp.isSuccessful || detailResp.body() == null) {
+        throw IllegalStateException("Failed to load project details for download: HTTP ${detailResp.code()}")
+      }
+      val detail = detailResp.body()!!
+      val validChapters = detail.chapters.filter { it.status == "mastered" || it.downloadUrl != null }
+      if (validChapters.isEmpty()) {
+        throw IllegalStateException("No mastered chapters available to download.")
+      }
 
-      val validChapters = detail.chapters.filter { it.status == "mastered" || it.streamUrl != null }
-      val downloadDir = File(context.filesDir, "crazy_downloads/$projectId").apply { mkdirs() }
-
-      val localChapterIds = mutableListOf<ChapterId>()
-      val totalToDownload = if (validChapters.isNotEmpty()) validChapters.size else 1
+      val downloadsDir = File(context.filesDir, "crazy_downloads/$projectId").apply { mkdirs() }
       var downloadedCount = 0
+      val total = validChapters.size
 
-      if (validChapters.isNotEmpty()) {
-        for ((idx, ch) in validChapters.withIndex()) {
-          onProgress(idx.toFloat() / totalToDownload.toFloat(), "Downloading ${ch.title} (${idx + 1}/$totalToDownload)...")
-          val downloadUrl = "$serverUrl/api/projects/$projectId/download/chapter/${ch.number}"
-          val targetFile = File(downloadDir, "chapter_${ch.number}.wav")
+      val localChapters = mutableListOf<Chapter>()
+      val localChapterIds = mutableListOf<ChapterId>()
 
-          val req = Request.Builder().url(downloadUrl).build()
+      for ((idx, ch) in validChapters.withIndex()) {
+        onProgress((idx.toFloat() / total), "Downloading Chapter ${ch.number} of $total...")
+        val rawDlUrl = ch.downloadUrl ?: "api/projects/$projectId/download/chapter/${ch.number}"
+        val fullDlUrl = if (rawDlUrl.startsWith("http")) rawDlUrl else "$serverUrl/$rawDlUrl"
+        val chFile = File(downloadsDir, "chapter_${String.format("%03d", ch.number)}.wav")
+
+        if (!chFile.exists() || chFile.length() == 0L) {
+          val req = Request.Builder().url(fullDlUrl).build()
           val resp = okHttpClient.newCall(req).execute()
-          if (resp.isSuccessful) {
-            resp.body.byteStream().use { input ->
-              FileOutputStream(targetFile).use { output ->
-                input.copyTo(output)
-              }
-            }
-            val localId = ChapterId(Uri.fromFile(targetFile).toString())
-            localChapterIds.add(localId)
-            val durationMs = ((ch.durationSeconds ?: 0.0) * 1000.0).toLong()
-            val finalDuration = if (durationMs > 0) durationMs else 60_000L
-
-            chapterRepo.put(
-              Chapter(
-                id = localId,
-                name = ch.title,
-                duration = finalDuration,
-                fileLastModified = Instant.now(),
-                fileSize = targetFile.length(),
-                markData = listOf(MarkData(name = ch.title, startMs = 0L)),
-              )
-            )
-            downloadedCount++
+          if (!resp.isSuccessful) {
+            throw IllegalStateException("Failed to download chapter ${ch.number}: HTTP ${resp.code}")
+          }
+          val body = resp.body
+          FileOutputStream(chFile).use { out ->
+            body.byteStream().copyTo(out)
           }
         }
-      } else {
-        onProgress(0.5f, "Downloading ${content.name}...")
-        val downloadUrl = "$serverUrl/api/projects/$projectId/download"
-        val targetFile = File(downloadDir, "$projectId.m4b")
-        val req = Request.Builder().url(downloadUrl).build()
-        val resp = okHttpClient.newCall(req).execute()
-        if (resp.isSuccessful) {
-          resp.body.byteStream().use { input ->
-            FileOutputStream(targetFile).use { output ->
-              input.copyTo(output)
-            }
-          }
-          val localId = ChapterId(Uri.fromFile(targetFile).toString())
-          localChapterIds.add(localId)
 
-          val marks = mutableListOf<MarkData>()
-          var cumMs = 0L
-          for (ch in detail.chapters) {
-            val dur = ((ch.durationSeconds ?: 0.0) * 1000.0).toLong()
-            marks.add(MarkData(name = ch.title.ifBlank { "Chapter ${ch.number}" }, startMs = cumMs))
-            cumMs += if (dur > 0) dur else 60_000L
-          }
-
-          chapterRepo.put(
-            Chapter(
-              id = localId,
-              name = content.name,
-              duration = (detail.totalChapters * 60_000L).coerceAtLeast(cumMs),
-              fileLastModified = Instant.now(),
-              fileSize = targetFile.length(),
-              markData = marks,
-            )
-          )
-          downloadedCount++
+        val localChId = ChapterId(Uri.fromFile(chFile).toString())
+        localChapterIds.add(localChId)
+        val durMs = ((ch.durationSeconds ?: 0.0) * 1000.0).toLong()
+        val finalDur = if (durMs > 0) durMs else 60_000L
+        val rawTitle = ch.title.trim()
+        val chTitle = when {
+          rawTitle.isBlank() -> "Chapter ${ch.number}"
+          rawTitle.equals("Chapter ${ch.number}", ignoreCase = true) -> rawTitle
+          rawTitle.startsWith("Chapter ${ch.number}:", ignoreCase = true) || rawTitle.startsWith("Chapter ${ch.number} -", ignoreCase = true) -> rawTitle
+          else -> "Chapter ${ch.number}: $rawTitle"
         }
+
+        val chapter = Chapter(
+          id = localChId,
+          name = chTitle,
+          duration = finalDur,
+          fileLastModified = Instant.now(),
+          fileSize = chFile.length(),
+          markData = listOf(MarkData(name = chTitle, startMs = 0L)),
+        )
+        chapterRepo.put(chapter)
+        localChapters.add(chapter)
+        downloadedCount++
       }
 
       val updatedContent = content.copy(

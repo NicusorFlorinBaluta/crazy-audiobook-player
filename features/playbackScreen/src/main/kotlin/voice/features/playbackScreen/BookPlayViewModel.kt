@@ -270,9 +270,14 @@ class BookPlayViewModel(
         items = book.chapters.flatMapIndexed { chapterIndex, chapter ->
           chapter.chapterMarks.mapIndexed { markIndex, chapterMark ->
             val previousChapters = book.chapters.take(chapterIndex)
+            val markName = chapterMark.name ?: chapter.name ?: ""
+            val chNumberMatch = Regex("""(?:chapter|ch\.?)\s*(\d+)""", RegexOption.IGNORE_CASE).find(markName)
+              ?: Regex("""(?:chapter|ch\.?)\s*(\d+)""", RegexOption.IGNORE_CASE).find(chapter.id.value)
+            val chNumber = chNumberMatch?.groupValues?.get(1)?.toIntOrNull()
+              ?: (previousChapters.sumOf { it.chapterMarks.count() } + markIndex + 1)
             BookPlayDialogViewState.SelectChapterDialog.ItemViewState(
-              number = previousChapters.sumOf { it.chapterMarks.count() } + markIndex + 1,
-              name = chapterMark.name ?: "",
+              number = chNumber,
+              name = markName,
               active = chapterMark == book.currentMark && chapter == book.currentChapter,
               time = formatTime(previousChapters.sumOf { it.duration } + chapterMark.startMs),
             )
@@ -285,16 +290,18 @@ class BookPlayViewModel(
   fun onChapterClick(number: Int) {
     scope.launch {
       val book = currentBook() ?: return@launch
-      var currentIndex = -1
-      book.chapters.forEach { chapter ->
-        chapter.chapterMarks.forEach { mark ->
-          currentIndex++
-          if (currentIndex == number - 1) {
-            player.setPosition(mark.startMs, chapter.id)
-            dialogState.value = null
-            return@launch
-          }
-        }
+      val allMarks = book.chapters.flatMap { ch -> ch.chapterMarks.map { mark -> ch to mark } }
+      val target = allMarks.firstOrNull { (ch, mark) ->
+        val markName = mark.name ?: ch.name ?: ""
+        val match = Regex("""(?:chapter|ch\.?)\s*(\d+)""", RegexOption.IGNORE_CASE).find(markName)
+          ?: Regex("""(?:chapter|ch\.?)\s*(\d+)""", RegexOption.IGNORE_CASE).find(ch.id.value)
+        match?.groupValues?.get(1)?.toIntOrNull() == number
+      } ?: allMarks.getOrNull(number - 1)
+
+      if (target != null) {
+        val (chapter, mark) = target
+        player.setPosition(mark.startMs, chapter.id)
+        dialogState.value = null
       }
     }
   }
