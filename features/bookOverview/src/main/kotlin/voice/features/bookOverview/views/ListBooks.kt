@@ -107,13 +107,37 @@ internal fun ListBookRow(
             .padding(start = 12.dp)
             .weight(1f),
         ) {
-          if (book.author != null) {
-            Text(
-              text = book.author.toUpperCase(LocaleList.current),
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              maxLines = 1,
-            )
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            if (book.remoteStatus == "in_progress") {
+              Text(
+                text = "⚡ IN PRODUCTION",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(end = 6.dp),
+              )
+            } else if (book.isRemoteStream) {
+              Text(
+                text = "☁️ STREAM",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(end = 6.dp),
+              )
+            } else if (book.isDownloaded) {
+              Text(
+                text = "📥 OFFLINE",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.padding(end = 6.dp),
+              )
+            }
+            if (book.author != null) {
+              Text(
+                text = book.author.toUpperCase(LocaleList.current),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+              )
+            }
           }
 
           Text(

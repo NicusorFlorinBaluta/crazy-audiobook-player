@@ -47,4 +47,31 @@ class BookOverviewCategoryTest {
     }
     assertEquals(expected = BookOverviewCategory.CURRENT, actual = book.category)
   }
+
+  @Test
+  fun crazyStream() {
+    val book = book().let { book ->
+      book.copy(
+        content = book.content.copy(
+          isRemoteStream = true,
+          remoteProjectId = "sample_book",
+        ),
+      )
+    }
+    assertEquals(expected = BookOverviewCategory.CRAZY_STREAM, actual = book.category)
+  }
+
+  @Test
+  fun crazyDownloaded() {
+    val book = book().let { book ->
+      book.copy(
+        content = book.content.copy(
+          isRemoteStream = false,
+          isDownloaded = true,
+          remoteProjectId = "sample_book",
+        ),
+      )
+    }
+    assertEquals(expected = BookOverviewCategory.CRAZY_DOWNLOADED, actual = book.category)
+  }
 }

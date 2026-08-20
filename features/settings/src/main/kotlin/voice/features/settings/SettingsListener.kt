@@ -31,6 +31,11 @@ interface SettingsListener {
 
   fun openDeveloperMenu()
 
+  fun onCrazyServerUrlRowClick()
+  fun onCrazyServerUrlChanged(url: String)
+  fun syncCrazyAudiobooks()
+  fun onCrazyDownloadWifiOnlyChange(enabled: Boolean)
+
   companion object {
     fun noop() = object : SettingsListener {
       override fun close() {}
@@ -57,6 +62,10 @@ interface SettingsListener {
       override fun openFolderPicker() {}
       override fun onAppVersionClick() {}
       override fun openDeveloperMenu() {}
+      override fun onCrazyServerUrlRowClick() {}
+      override fun onCrazyServerUrlChanged(url: String) {}
+      override fun syncCrazyAudiobooks() {}
+      override fun onCrazyDownloadWifiOnlyChange(enabled: Boolean) {}
     }
   }
 }

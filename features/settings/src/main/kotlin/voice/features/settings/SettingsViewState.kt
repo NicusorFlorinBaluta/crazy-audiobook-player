@@ -19,6 +19,8 @@ data class SettingsViewState(
   val showDeveloperMenu: Boolean,
   val showSupportDevelopment: Boolean,
   val kioskMode: Boolean,
+  val crazyServerUrl: String = "http://192.168.50.44:8000",
+  val crazyDownloadWifiOnly: Boolean = true,
 ) {
 
   enum class Dialog {
@@ -26,6 +28,7 @@ data class SettingsViewState(
     SeekTime,
     Theme,
     ColorScheme,
+    CrazyServerUrl,
   }
 
   companion object {
@@ -45,6 +48,8 @@ data class SettingsViewState(
         showDeveloperMenu = true,
         showSupportDevelopment = true,
         kioskMode = false,
+        crazyServerUrl = "http://192.168.50.44:8000",
+        crazyDownloadWifiOnly = true,
       )
     }
   }
@@ -57,9 +62,9 @@ data class SettingsViewState(
     companion object {
       fun preview(): AutoSleepTimerViewState {
         return AutoSleepTimerViewState(
-          enabled = false,
-          startTime = LocalTime.of(22, 0),
-          endTime = LocalTime.of(6, 0),
+          enabled = true,
+          startTime = LocalTime.now(),
+          endTime = LocalTime.now().plusHours(1),
         )
       }
     }

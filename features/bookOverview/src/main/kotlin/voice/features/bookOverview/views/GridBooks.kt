@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
@@ -129,13 +130,48 @@ internal fun GridBook(
 
       Spacer(Modifier.height(4.dp))
 
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        if (book.remoteStatus == "in_progress") {
+          Text(
+            text = "⚡ IN PRODUCTION",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(end = 4.dp),
+          )
+        } else if (book.isRemoteStream) {
+          Text(
+            text = "☁️ STREAM",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(end = 4.dp),
+          )
+        } else if (book.isDownloaded) {
+          Text(
+            text = "📥 OFFLINE",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.padding(end = 4.dp),
+          )
+        }
+      }
+
       Text(
         text = book.name,
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onSurface,
-        maxLines = 3,
+        maxLines = 2,
         overflow = TextOverflow.Ellipsis,
       )
+
+      if (!book.author.isNullOrBlank()) {
+        Text(
+          text = book.author,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
 
       BookRemainingProgressRow(
         remainingTime = book.remainingTime,

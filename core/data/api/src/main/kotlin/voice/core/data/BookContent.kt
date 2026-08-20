@@ -28,6 +28,16 @@ public data class BookContent(
   val narrator: String?,
   val series: String?,
   val part: String?,
+  @ColumnInfo(defaultValue = "NULL")
+  val remoteProjectId: String? = null,
+  @ColumnInfo(defaultValue = "0")
+  val isRemoteStream: Boolean = false,
+  @ColumnInfo(defaultValue = "0")
+  val isDownloaded: Boolean = false,
+  @ColumnInfo(defaultValue = "NULL")
+  val remoteStreamUrl: String? = null,
+  @ColumnInfo(defaultValue = "NULL")
+  val remoteStatus: String? = null,
 ) {
 
   @Ignore

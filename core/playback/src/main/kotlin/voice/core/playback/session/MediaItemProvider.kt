@@ -134,6 +134,9 @@ class MediaItemProvider(
 
   fun mediaItem(book: Book): MediaItem = MediaItem(
     title = book.content.name,
+    album = book.content.name,
+    artist = book.content.author,
+    genre = book.content.genre,
     mediaId = MediaId.Book(book.id),
     browsable = false,
     isPlayable = true,
@@ -146,35 +149,48 @@ class MediaItemProvider(
     content: BookContent,
   ) = MediaItem(
     title = chapter.name ?: chapter.id.value,
+    album = content.name,
+    artist = content.author,
+    genre = content.genre,
     mediaId = MediaId.Chapter(bookId = content.id, chapterId = chapter.id),
     browsable = false,
     isPlayable = true,
     sourceUri = chapter.id.toUri(),
     imageUri = content.cover?.toProvidedUri(),
-    artist = content.author,
     mediaType = MediaType.AudioBookChapter,
   )
 
   private fun mediaItem(
     playbackItem: PlaybackItem,
     content: BookContent,
-  ) = MediaItem(
-    title = playbackItem.mark.name
-      ?: playbackItem.chapter.name
-      ?: playbackItem.chapter.id.value,
-    mediaId = playbackItem.mediaId,
-    browsable = false,
-    isPlayable = true,
-    sourceUri = playbackItem.chapter.id.toUri(),
-    imageUri = content.cover?.toProvidedUri(),
-    artist = content.author,
-    durationMs = playbackItem.mark.durationMs,
-    clippingConfiguration = ClippingConfiguration.Builder()
-      .setStartPositionMs(playbackItem.mark.startMs)
-      .setEndPositionMs(playbackItem.mark.endMs)
-      .build(),
-    mediaType = MediaType.AudioBookChapter,
-  )
+  ): MediaItem {
+    val needsClipping = playbackItem.mark.startMs > 0L ||
+      (playbackItem.chapter.chapterMarks.size > 1 && playbackItem.mark.endMs < playbackItem.chapter.duration)
+    val clippingConfig = if (needsClipping) {
+      ClippingConfiguration.Builder()
+        .setStartPositionMs(playbackItem.mark.startMs)
+        .setEndPositionMs(playbackItem.mark.endMs)
+        .build()
+    } else {
+      ClippingConfiguration.UNSET
+    }
+    return MediaItem(
+      title = playbackItem.mark.name
+        ?: playbackItem.chapter.name
+        ?: playbackItem.chapter.id.value,
+      album = content.name,
+      artist = content.author,
+      genre = content.genre,
+      mediaId = playbackItem.mediaId,
+      browsable = false,
+      isPlayable = true,
+      sourceUri = playbackItem.chapter.id.toUri(),
+      imageUri = content.cover?.toProvidedUri(),
+      durationMs = playbackItem.mark.durationMs,
+      clippingConfiguration = clippingConfig,
+      mediaType = MediaType.AudioBookChapter,
+    )
+  }
 
   private fun File.toProvidedUri(): Uri = imageFileProvider.uri(this)
 }

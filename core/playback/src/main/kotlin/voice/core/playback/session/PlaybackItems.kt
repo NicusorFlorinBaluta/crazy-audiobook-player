@@ -44,11 +44,25 @@ internal fun Book.playbackItemForPosition(
   chapterId: ChapterId,
   positionInChapterMs: Long,
 ): PlaybackItem? {
-  val chapter = chapters.firstOrNull { it.id == chapterId } ?: return null
+  val allItems = playbackItems()
+  if (allItems.isEmpty()) return null
+  val chapter = chapters.firstOrNull { it.id == chapterId } ?: chapters.firstOrNull() ?: return allItems.firstOrNull()
   val mark = chapter.markForPosition(positionInChapterMs)
-  return playbackItems().firstOrNull {
-    it.chapter.id == chapterId && it.mark == mark
-  }
+  return allItems.firstOrNull {
+    it.chapter.id == chapter.id && it.mark == mark
+  } ?: allItems.firstOrNull()
+}
+
+internal fun Book.playbackItemForPosition(
+  positionInChapterMs: Long,
+): PlaybackItem? {
+  val allItems = playbackItems()
+  if (allItems.isEmpty()) return null
+  val chapter = currentChapter
+  val mark = chapter.markForPosition(positionInChapterMs)
+  return allItems.firstOrNull {
+    it.chapter.id == chapter.id && it.mark == mark
+  } ?: allItems.firstOrNull()
 }
 
 internal val MediaId.bookId: BookId?

@@ -3,13 +3,16 @@ package voice.core.data.store
 import dev.zacsweers.metro.Qualifier
 
 @Qualifier
-public annotation class OnboardingCompletedStore
+public annotation class ThemeModeStore
 
 @Qualifier
-public annotation class CurrentBookStore
+public annotation class ThemeColorSchemeStore
 
 @Qualifier
 public annotation class AutoRewindAmountStore
+
+@Qualifier
+public annotation class FadeOutStore
 
 @Qualifier
 public annotation class SeekTimeStore
@@ -21,13 +24,10 @@ public annotation class SleepTimerPreferenceStore
 public annotation class GridModeStore
 
 @Qualifier
-public annotation class ThemeModeStore
+public annotation class OnboardingCompletedStore
 
 @Qualifier
-public annotation class ThemeColorSchemeStore
-
-@Qualifier
-public annotation class FadeOutStore
+public annotation class CurrentBookStore
 
 @Qualifier
 public annotation class AmountOfBatteryOptimizationRequestedStore
@@ -46,3 +46,9 @@ public annotation class DeveloperMenuUnlockedStore
 
 @Qualifier
 public annotation class FeatureFlagOverridesStore
+
+@Qualifier
+public annotation class CrazyServerUrlStore
+
+@Qualifier
+public annotation class CrazyDownloadWifiOnlyStore

@@ -9,17 +9,20 @@ import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import voice.core.data.BookId
+import voice.core.data.repo.BookContentRepo
 import voice.core.logging.api.Logger
 import voice.core.scanner.MediaScanTrigger
 import voice.features.bookOverview.bottomSheet.BottomSheetItem
 import voice.features.bookOverview.bottomSheet.BottomSheetItemViewModel
 import voice.features.bookOverview.di.BookOverviewScope
+import java.io.File
 
 @SingleIn(BookOverviewScope::class)
 @ContributesIntoSet(BookOverviewScope::class)
 class DeleteBookViewModel(
   private val application: Application,
   private val mediaScanTrigger: MediaScanTrigger,
+  private val bookContentRepo: BookContentRepo,
 ) : BottomSheetItemViewModel {
 
   private val scope = MainScope()
@@ -37,10 +40,10 @@ class DeleteBookViewModel(
   ) {
     if (item != BottomSheetItem.DeleteBook) return
 
-    _state.value = DeleteBookViewState(
-      id = bookId,
-      deleteCheckBoxChecked = false,
-      fileToDelete = bookId.toUri().pathSegments
+    val fileName = if (bookId.value.startsWith("crazy://")) {
+      bookId.value.removePrefix("crazy://")
+    } else {
+      bookId.toUri().pathSegments
         .let { segments ->
           val result = segments.lastOrNull()?.removePrefix("primary:")
           if (result.isNullOrEmpty()) {
@@ -49,7 +52,13 @@ class DeleteBookViewModel(
           } else {
             result
           }
-        },
+        }
+    }
+
+    _state.value = DeleteBookViewState(
+      id = bookId,
+      deleteCheckBoxChecked = false,
+      fileToDelete = fileName,
     )
   }
 
@@ -66,9 +75,20 @@ class DeleteBookViewModel(
     if (state != null) {
       check(state.confirmButtonEnabled)
       scope.launch {
-        val uri = state.id.toUri()
-        val documentFile = DocumentFile.fromSingleUri(application, uri)
-        scope.launch {
+        val bookId = state.id
+        if (bookId.value.startsWith("crazy://")) {
+          val content = bookContentRepo.get(bookId)
+          if (content != null) {
+            bookContentRepo.put(content.copy(isActive = false))
+            val projectId = content.remoteProjectId
+            if (projectId != null) {
+              File(application.filesDir, "crazy_downloads/$projectId").deleteRecursively()
+              File(application.filesDir, "crazy_covers/$projectId.jpg").delete()
+            }
+          }
+        } else {
+          val uri = bookId.toUri()
+          val documentFile = DocumentFile.fromSingleUri(application, uri)
           documentFile?.delete()
           mediaScanTrigger.scan(restartIfScanning = true)
         }

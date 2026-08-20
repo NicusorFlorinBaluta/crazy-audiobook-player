@@ -12,9 +12,17 @@ internal fun Header(
   category: BookOverviewCategory,
   modifier: Modifier = Modifier,
 ) {
+  val title = if (category.customTitle != null) {
+    category.customTitle
+  } else if (category.nameRes != null) {
+    stringResource(id = category.nameRes)
+  } else {
+    category.name
+  }
   Text(
     modifier = modifier,
-    text = stringResource(id = category.nameRes),
-    style = MaterialTheme.typography.headlineSmall,
+    text = title,
+    style = MaterialTheme.typography.titleMedium,
+    color = MaterialTheme.colorScheme.primary,
   )
 }

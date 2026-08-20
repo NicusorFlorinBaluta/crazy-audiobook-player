@@ -1,11 +1,14 @@
 package voice.core.playback.di
 
 import android.content.Context
+import android.util.Base64
+import androidx.datastore.core.DataStore
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
@@ -18,6 +21,10 @@ import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import voice.core.data.store.CrazyServerUrlStore
 import voice.core.featureflag.FeatureFlag
 import voice.core.featureflag.Media3AudioOffloadFeatureFlagQualifier
 import voice.core.playback.misc.VolumeGain
@@ -37,8 +44,34 @@ interface PlaybackModule {
 
   @Provides
   @SingleIn(PlaybackScope::class)
-  fun mediaSourceFactory(context: Context): MediaSource.Factory {
-    val dataSourceFactory = DefaultDataSource.Factory(context)
+  fun mediaSourceFactory(
+    context: Context,
+    @CrazyServerUrlStore serverUrlStore: DataStore<String>,
+  ): MediaSource.Factory {
+    val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+      .setAllowCrossProtocolRedirects(true)
+      .setConnectTimeoutMs(20000)
+      .setReadTimeoutMs(60000)
+      .setUserAgent("VoiceAudiobookPlayer/CrazyVoice")
+
+    val rawUrl = try {
+      runBlocking { serverUrlStore.data.first() }
+    } catch (_: Exception) {
+      ""
+    }
+
+    if (rawUrl.isNotBlank()) {
+      val parsed = rawUrl.toHttpUrlOrNull()
+      if (parsed != null && (parsed.username.isNotEmpty() || parsed.password.isNotEmpty())) {
+        val creds = "${parsed.username}:${parsed.password}"
+        val encoded = Base64.encodeToString(creds.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        httpDataSourceFactory.setDefaultRequestProperties(
+          mapOf("Authorization" to "Basic $encoded")
+        )
+      }
+    }
+
+    val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
     val extractorsFactory = DefaultExtractorsFactory()
       .setConstantBitrateSeekingEnabled(true)
     return DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)

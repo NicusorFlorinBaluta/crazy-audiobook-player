@@ -72,6 +72,18 @@ internal fun BookPlayAppBar(
       onVolumeBoostClick = onVolumeBoostClick,
     )
   }
+
+  val subtitle = buildString {
+    if (!viewState.author.isNullOrBlank()) {
+      append(viewState.author)
+    }
+    if (!viewState.narrator.isNullOrBlank()) {
+      if (isNotEmpty()) append(" • ")
+      append("Narrated by ")
+      append(viewState.narrator)
+    }
+  }.ifBlank { null }
+
   if (useLandscapeLayout) {
     TopAppBar(
       navigationIcon = {
@@ -79,7 +91,7 @@ internal fun BookPlayAppBar(
       },
       actions = appBarActions,
       title = {
-        AppBarTitle(viewState.title)
+        AppBarTitle(viewState.title, subtitle)
       },
     )
   } else {
@@ -89,7 +101,7 @@ internal fun BookPlayAppBar(
       },
       actions = appBarActions,
       title = {
-        AppBarTitle(viewState.title)
+        AppBarTitle(viewState.title, subtitle)
       },
     )
   }

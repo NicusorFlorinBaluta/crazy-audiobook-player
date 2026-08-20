@@ -1,27 +1,37 @@
 package voice.features.settings.views
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.retain.retain
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesTo
@@ -90,6 +100,56 @@ private fun Settings(
             onClick = listener::openDeveloperMenu,
           )
         }
+      }
+      item {
+        ListItem(
+          modifier = Modifier.clickable { listener.onCrazyServerUrlRowClick() },
+          leadingContent = {
+            Icon(
+              imageVector = VoiceIcons.Language,
+              contentDescription = "Crazy Audiobook Server",
+              tint = MaterialTheme.colorScheme.primary,
+            )
+          },
+          headlineContent = {
+            Text("Crazy Audiobook Server")
+          },
+          supportingContent = {
+            Text(viewState.crazyServerUrl.ifBlank { "Tap to configure server URL (e.g. http://192.168.50.44:8000)" })
+          },
+          trailingContent = {
+            IconButton(onClick = { listener.syncCrazyAudiobooks() }) {
+              Icon(
+                imageVector = VoiceIcons.Download,
+                contentDescription = "Sync Audiobooks",
+                tint = MaterialTheme.colorScheme.primary,
+              )
+            }
+          },
+        )
+      }
+      item {
+        ListItem(
+          modifier = Modifier.clickable { listener.onCrazyDownloadWifiOnlyChange(!viewState.crazyDownloadWifiOnly) },
+          leadingContent = {
+            Icon(
+              imageVector = VoiceIcons.Download,
+              contentDescription = "Download on Wi-Fi only",
+            )
+          },
+          headlineContent = {
+            Text("Download on Wi-Fi only")
+          },
+          supportingContent = {
+            Text("Prevent downloading audiobooks over mobile data")
+          },
+          trailingContent = {
+            Switch(
+              checked = viewState.crazyDownloadWifiOnly,
+              onCheckedChange = { listener.onCrazyDownloadWifiOnlyChange(it) },
+            )
+          },
+        )
       }
       item {
         ListItem(
@@ -338,6 +398,9 @@ fun Settings() {
         SettingsViewEffect.DeveloperMenuUnlocked -> {
           snackbarHostState.showSnackbar(currentDeveloperMenuUnlockedMessage.value)
         }
+        is SettingsViewEffect.ShowMessage -> {
+          snackbarHostState.showSnackbar(viewEffect.message)
+        }
       }
     }
   }
@@ -379,5 +442,55 @@ private fun Dialog(
         onDismiss = listener::dismissDialog,
       )
     }
+    SettingsViewState.Dialog.CrazyServerUrl -> {
+      CrazyServerUrlDialog(
+        currentUrl = viewState.crazyServerUrl,
+        onConfirm = listener::onCrazyServerUrlChanged,
+        onDismiss = listener::dismissDialog,
+      )
+    }
   }
+}
+
+@Composable
+private fun CrazyServerUrlDialog(
+  currentUrl: String,
+  onConfirm: (String) -> Unit,
+  onDismiss: () -> Unit,
+) {
+  var urlText by remember { mutableStateOf(currentUrl) }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Crazy Audiobook Server") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+          text = "Enter your server endpoint (e.g. http://192.168.50.44:8000, Tailscale IP, or reverse-proxy URL):",
+          style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedTextField(
+          value = urlText,
+          onValueChange = { urlText = it },
+          label = { Text("Server URL") },
+          placeholder = { Text("http://192.168.50.44:8000") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
+    },
+    confirmButton = {
+      TextButton(
+        onClick = {
+          onConfirm(urlText)
+        },
+      ) {
+        Text("Save & Sync")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancel")
+      }
+    },
+  )
 }

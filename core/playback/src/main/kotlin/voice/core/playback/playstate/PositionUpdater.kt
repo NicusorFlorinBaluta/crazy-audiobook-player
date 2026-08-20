@@ -5,12 +5,14 @@ import androidx.media3.common.Player
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import voice.core.data.remote.CrazySyncManager
 import voice.core.data.repo.BookRepository
 import voice.core.featureflag.ExperimentalPlaybackPersistenceQualifier
 import voice.core.featureflag.FeatureFlag
@@ -30,6 +32,7 @@ class PositionUpdater(
   private val bookRepo: BookRepository,
   private val scope: CoroutineScope,
   private val playStateManager: PlayStateManager,
+  private val crazySyncManager: CrazySyncManager,
   @ExperimentalPlaybackPersistenceQualifier
   private val experimentalPlaybackPersistenceFeatureFlag: FeatureFlag<Boolean>,
 ) : Player.Listener {
@@ -109,11 +112,19 @@ class PositionUpdater(
     bookRepo.updateBook(bookId) { content ->
       if (chapterId in content.chapters) {
         Logger.d("$positionInChapter is the new position!")
-        content.copy(
+        val updated = content.copy(
           currentChapter = chapterId,
           positionInChapter = positionInChapter,
           lastPlayedAt = Instant.now(),
         )
+        if (updated.remoteProjectId != null) {
+          scope.launch(Dispatchers.IO) {
+            try {
+              crazySyncManager.syncProgressToServer(updated)
+            } catch (_: Exception) {}
+          }
+        }
+        updated
       } else {
         Logger.w("$mediaId not in $content")
         content

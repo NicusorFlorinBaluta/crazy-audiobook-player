@@ -14,6 +14,9 @@ data class BookOverviewItemViewState(
   val progress: Float,
   val id: BookId,
   val remainingTime: String,
+  val isRemoteStream: Boolean = false,
+  val isDownloaded: Boolean = false,
+  val remoteStatus: String? = null,
 )
 
 internal fun Book.toItemViewState() = BookOverviewItemViewState(
@@ -23,6 +26,9 @@ internal fun Book.toItemViewState() = BookOverviewItemViewState(
   id = id,
   progress = progress(),
   remainingTime = formatTime(duration - position),
+  isRemoteStream = content.isRemoteStream,
+  isDownloaded = content.isDownloaded,
+  remoteStatus = content.remoteStatus,
 )
 
 private fun Book.progress(): Float {

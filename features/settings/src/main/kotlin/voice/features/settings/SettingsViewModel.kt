@@ -19,9 +19,12 @@ import voice.core.common.MainScope
 import voice.core.data.GridMode
 import voice.core.data.ThemeColorScheme
 import voice.core.data.ThemeMode
+import voice.core.data.remote.CrazySyncManager
 import voice.core.data.sleeptimer.SleepTimerPreference
 import voice.core.data.store.AnalyticsConsentStore
 import voice.core.data.store.AutoRewindAmountStore
+import voice.core.data.store.CrazyDownloadWifiOnlyStore
+import voice.core.data.store.CrazyServerUrlStore
 import voice.core.data.store.DeveloperMenuUnlockedStore
 import voice.core.data.store.GridModeStore
 import voice.core.data.store.SeekTimeStore
@@ -60,6 +63,11 @@ class SettingsViewModel(
   @DeveloperMenuUnlockedStore
   private val developerMenuUnlockedStore: DataStore<Boolean>,
   private val dynamicColorAvailability: DynamicColorAvailability,
+  @CrazyServerUrlStore
+  private val crazyServerUrlStore: DataStore<String>,
+  @CrazyDownloadWifiOnlyStore
+  private val crazyDownloadWifiOnlyStore: DataStore<Boolean>,
+  private val crazySyncManager: CrazySyncManager,
   dispatcherProvider: DispatcherProvider,
 ) : SettingsListener {
 
@@ -87,6 +95,9 @@ class SettingsViewModel(
     val showThemeColorSchemePref = remember {
       dynamicColorAvailability.isSupported()
     }
+    val crazyServerUrl by remember { crazyServerUrlStore.data }.collectAsState(initial = "http://192.168.50.44:8000")
+    val crazyDownloadWifiOnly by remember { crazyDownloadWifiOnlyStore.data }.collectAsState(initial = true)
+
     return SettingsViewState(
       themeMode = themeMode,
       themeColorScheme = themeColorScheme,
@@ -110,6 +121,8 @@ class SettingsViewModel(
       showDeveloperMenu = showDeveloperMenu,
       showSupportDevelopment = appInfoProvider.supportDevelopmentIncluded,
       kioskMode = kioskMode,
+      crazyServerUrl = crazyServerUrl,
+      crazyDownloadWifiOnly = crazyDownloadWifiOnly,
     )
   }
 
@@ -141,8 +154,8 @@ class SettingsViewModel(
 
   override fun toggleGrid() {
     mainScope.launch {
-      gridModeStore.updateData { currentMode ->
-        when (currentMode) {
+      gridModeStore.updateData { currentGridMode ->
+        when (currentGridMode) {
           GridMode.LIST -> GridMode.GRID
           GridMode.GRID -> GridMode.LIST
           GridMode.FOLLOW_DEVICE -> if (gridCount.useGridAsDefault()) {
@@ -155,24 +168,26 @@ class SettingsViewModel(
     }
   }
 
+  override fun onSeekAmountRowClick() {
+    dialog.value = SettingsViewState.Dialog.SeekTime
+  }
+
   override fun seekAmountChanged(seconds: Int) {
     mainScope.launch {
       seekTimeStore.updateData { seconds }
     }
+    dialog.value = null
   }
 
-  override fun onSeekAmountRowClick() {
-    dialog.value = SettingsViewState.Dialog.SeekTime
+  override fun onAutoRewindRowClick() {
+    dialog.value = SettingsViewState.Dialog.AutoRewindAmount
   }
 
   override fun autoRewindAmountChang(seconds: Int) {
     mainScope.launch {
       autoRewindAmountStore.updateData { seconds }
     }
-  }
-
-  override fun onAutoRewindRowClick() {
-    dialog.value = SettingsViewState.Dialog.AutoRewindAmount
+    dialog.value = null
   }
 
   override fun dismissDialog() {
@@ -180,22 +195,21 @@ class SettingsViewModel(
   }
 
   override fun getSupport() {
-    navigator.goTo(Destination.Website("https://github.com/PaulWoitaschek/Voice/discussions/categories/q-a"))
+    navigator.goTo(Destination.Website("https://github.com/PaulWoitaschek/Voice/issues/new/choose"))
   }
 
   override fun suggestIdea() {
-    navigator.goTo(Destination.Website("https://github.com/PaulWoitaschek/Voice/discussions/categories/ideas"))
+    navigator.goTo(Destination.Website("https://github.com/PaulWoitaschek/Voice/discussions/new?category=ideas"))
   }
 
   override fun openBugReport() {
-    val url = "https://github.com/PaulWoitaschek/Voice/issues/new".toUri()
+    val uri = "https://github.com/PaulWoitaschek/Voice/issues/new".toUri()
       .buildUpon()
-      .appendQueryParameter("template", "bug.yml")
-      .appendQueryParameter("version", appInfoProvider.versionName)
-      .appendQueryParameter("androidversion", Build.VERSION.SDK_INT.toString())
-      .appendQueryParameter("device", Build.MODEL)
-      .toString()
-    navigator.goTo(Destination.Website(url))
+      .appendQueryParameter("labels", "bug")
+      .appendQueryParameter("template", "bug_report.md")
+      .appendQueryParameter("body", appInfoProvider.versionName + " (" + Build.VERSION.SDK_INT + ")")
+      .build()
+    navigator.goTo(Destination.Website(uri.toString()))
   }
 
   override fun openTranslations() {
@@ -259,5 +273,44 @@ class SettingsViewModel(
 
   override fun openDeveloperMenu() {
     navigator.goTo(Destination.DeveloperSettings)
+  }
+
+  override fun onCrazyServerUrlRowClick() {
+    dialog.value = SettingsViewState.Dialog.CrazyServerUrl
+  }
+
+  override fun onCrazyServerUrlChanged(url: String) {
+    dialog.value = null
+    mainScope.launch {
+      val trimmed = url.trim()
+      crazyServerUrlStore.updateData { trimmed }
+      viewEffects.emit(SettingsViewEffect.ShowMessage("Connecting to $trimmed..."))
+      val result = crazySyncManager.syncCatalog()
+      result.onSuccess { count ->
+        viewEffects.emit(SettingsViewEffect.ShowMessage("Connected! Synced $count audiobooks from server."))
+      }.onFailure { err ->
+        val msg = err.localizedMessage ?: err.message ?: "Unknown error"
+        viewEffects.emit(SettingsViewEffect.ShowMessage("Connection failed: $msg"))
+      }
+    }
+  }
+
+  override fun syncCrazyAudiobooks() {
+    mainScope.launch {
+      viewEffects.emit(SettingsViewEffect.ShowMessage("Connecting to server..."))
+      val result = crazySyncManager.syncCatalog()
+      result.onSuccess { count ->
+        viewEffects.emit(SettingsViewEffect.ShowMessage("Connected! Synced $count audiobooks from server."))
+      }.onFailure { err ->
+        val msg = err.localizedMessage ?: err.message ?: "Unknown error"
+        viewEffects.emit(SettingsViewEffect.ShowMessage("Connection failed: $msg"))
+      }
+    }
+  }
+
+  override fun onCrazyDownloadWifiOnlyChange(enabled: Boolean) {
+    mainScope.launch {
+      crazyDownloadWifiOnlyStore.updateData { enabled }
+    }
   }
 }

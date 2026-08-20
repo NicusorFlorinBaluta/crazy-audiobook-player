@@ -29,6 +29,11 @@ class EditBookCategoryViewModel(private val repo: BookRepository) : BottomSheetI
         BottomSheetItem.BookCategoryMarkAsCurrent,
         BottomSheetItem.BookCategoryMarkAsNotStarted,
       )
+      BookOverviewCategory.CRAZY_STREAM,
+      BookOverviewCategory.CRAZY_DOWNLOADED -> listOf(
+        BottomSheetItem.BookCategoryMarkAsNotStarted,
+        BottomSheetItem.BookCategoryMarkAsCompleted,
+      )
     }
   }
 

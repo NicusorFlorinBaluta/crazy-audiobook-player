@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import dev.zacsweers.metro.Inject
@@ -24,6 +25,7 @@ import voice.core.playback.misc.VolumeGain
 import voice.core.playback.session.MediaId
 import voice.core.playback.session.MediaItemProvider
 import voice.core.playback.session.playbackItemForPosition
+import voice.core.playback.session.playbackItems
 import voice.core.playback.session.positionInMediaItem
 import voice.core.playback.session.toMediaIdOrNull
 import voice.core.sleeptimer.SleepTimer
@@ -51,7 +53,7 @@ class VoicePlayer(
   private val analytics: Analytics,
 ) : ForwardingPlayer(player) {
 
-  private val endOfChapterSleepTimerListener = object : Player.Listener {
+  private val playerListener = object : Player.Listener {
     override fun onPositionDiscontinuity(
       oldPosition: Player.PositionInfo,
       newPosition: Player.PositionInfo,
@@ -68,6 +70,10 @@ class VoicePlayer(
       }
     }
 
+    override fun onPlayerError(error: PlaybackException) {
+      Logger.e("VoicePlayer onPlayerError: ${error.errorCodeName} (${error.errorCode}): ${error.message}")
+    }
+
     private fun pauseAndDisableSleepTimerIfEndOfChapter() {
       if (sleepTimer.state.value !is SleepTimerState.Enabled.WithEndOfChapter) return
       Logger.v("Pausing due to EndOfChapter")
@@ -77,7 +83,7 @@ class VoicePlayer(
   }
 
   init {
-    player.addListener(endOfChapterSleepTimerListener)
+    player.addListener(playerListener)
   }
 
   fun forceSeekToNext() {
@@ -105,13 +111,6 @@ class VoicePlayer(
   }
 
   override fun getAvailableCommands(): Player.Commands {
-    // On Android 13, the notification always shows the "skip to next" and "skip to previous"
-    // actions.
-    // However these are also used internally when seeking for example through a bluetooth headset
-    // We use these and delegate them to fast forward / rewind.
-    // The player however only advertises the seek to next and previous item in the case
-    // that it's not the first or last track. Therefore we manually advertise that these
-    // are available.
     return super.getAvailableCommands()
       .buildUpon()
       .addAll(
@@ -247,7 +246,6 @@ class VoicePlayer(
   }
 
   override fun getPlaybackState(): Int = when (val state = super.getPlaybackState()) {
-    // redirect buffering to ready to prevent visual artifacts on seeking
     STATE_BUFFERING -> STATE_READY
     else -> state
   }
@@ -304,16 +302,22 @@ class VoicePlayer(
           player.setPlaybackSpeed(book.content.playbackSpeed)
           setSkipSilenceEnabled(book.content.skipSilence)
           volumeGain.gain = Decibel(book.content.gain)
+          val playbackItems = book.playbackItems()
+          if (playbackItems.isEmpty()) return
           val currentPlaybackItem = book.playbackItemForPosition(
             chapterId = book.content.currentChapter,
             positionInChapterMs = book.content.positionInChapter,
-          ) ?: return
+          ) ?: playbackItems.first()
           val mediaItems = mediaItemProvider.playbackItems(book)
-          player.setMediaItems(
-            mediaItems,
-            currentPlaybackItem.index,
-            currentPlaybackItem.positionInMediaItem(book.content.positionInChapter),
-          )
+          if (mediaItems.isNotEmpty()) {
+            val targetIndex = currentPlaybackItem.index.coerceIn(0, mediaItems.size - 1)
+            player.setMediaItems(
+              mediaItems,
+              targetIndex,
+              currentPlaybackItem.positionInMediaItem(book.content.positionInChapter),
+            )
+            player.prepare()
+          }
         }
       } else {
         Logger.w("Unexpected mediaId=$mediaId")

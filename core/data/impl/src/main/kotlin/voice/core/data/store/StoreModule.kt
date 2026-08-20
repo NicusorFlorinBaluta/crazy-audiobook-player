@@ -17,10 +17,12 @@ import voice.core.data.BookId
 import voice.core.data.GridMode
 import voice.core.data.ThemeColorScheme
 import voice.core.data.ThemeMode
+import voice.core.data.remote.CrazyBookSyncService
+import voice.core.data.remote.CrazySyncManager
 import voice.core.data.sleeptimer.SleepTimerPreference
 import voice.core.featureflag.FeatureFlagOverride
 import java.io.File
-import kotlin.time.Duration
+import java.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 @ContributesTo(AppScope::class)
@@ -81,11 +83,11 @@ public interface StoreModule {
   @Provides
   @SingleIn(AppScope::class)
   @FadeOutStore
-  private fun fadeOut(factory: VoiceDataStoreFactory): DataStore<Duration> {
+  private fun fadeOut(factory: VoiceDataStoreFactory): DataStore<kotlin.time.Duration> {
     return factory.create(
       fileName = "fadeOut",
       defaultValue = 10.seconds,
-      serializer = Duration.serializer(),
+      serializer = kotlin.time.Duration.serializer(),
     )
   }
 
@@ -204,6 +206,28 @@ public interface StoreModule {
       fileName = "featureFlagOverrides",
     )
   }
+
+  @Provides
+  @SingleIn(AppScope::class)
+  @CrazyServerUrlStore
+  private fun crazyServerUrl(factory: VoiceDataStoreFactory): DataStore<String> {
+    return factory.create(
+      serializer = String.serializer(),
+      fileName = "crazyServerUrl",
+      defaultValue = "http://192.168.50.44:8000",
+    )
+  }
+
+  @Provides
+  @SingleIn(AppScope::class)
+  @CrazyDownloadWifiOnlyStore
+  private fun crazyDownloadWifiOnly(factory: VoiceDataStoreFactory): DataStore<Boolean> {
+    return factory.boolean("crazyDownloadWifiOnly", defaultValue = true)
+  }
+
+  @Provides
+  @SingleIn(AppScope::class)
+  private fun crazySyncManager(syncService: CrazyBookSyncService): CrazySyncManager = syncService
 }
 
 private class LegacyDarkThemeMigration(

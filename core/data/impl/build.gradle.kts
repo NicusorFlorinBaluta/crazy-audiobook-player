@@ -39,6 +39,10 @@ dependencies {
   implementation(libs.coroutines.core)
   implementation(projects.core.analytics.api)
 
+  implementation(libs.retrofit.core)
+  implementation(libs.retrofit.serialization)
+  implementation(libs.okhttp)
+
   api(libs.room.runtime)
   ksp(libs.room.compiler)
 

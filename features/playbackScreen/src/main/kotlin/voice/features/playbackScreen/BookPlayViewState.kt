@@ -10,6 +10,9 @@ data class BookPlayViewState(
   val chapterName: String?,
   val showPreviousNextButtons: Boolean,
   val title: String,
+  val author: String? = null,
+  val narrator: String? = null,
+  val series: String? = null,
   val sleepTimerState: SleepTimerViewState,
   val playedTime: Duration,
   val duration: Duration,
@@ -37,6 +40,8 @@ data class BookPlayViewState(
 }
 
 internal sealed interface BookPlayDialogViewState {
+  data class SleepTimer(val viewState: SleepTimerViewState) : BookPlayDialogViewState
+
   data class SpeedDialog(val speed: Float) : BookPlayDialogViewState {
 
     val maxSpeed: Float get() = if (speed < 2F) 2F else 3.5F
@@ -57,7 +62,4 @@ internal sealed interface BookPlayDialogViewState {
       val time: String,
     )
   }
-
-  @JvmInline
-  value class SleepTimer(val viewState: SleepTimerViewState) : BookPlayDialogViewState
 }

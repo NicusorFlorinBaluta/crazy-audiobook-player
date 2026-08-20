@@ -1,9 +1,11 @@
 package voice.features.playbackScreen.view
 
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
@@ -23,22 +25,27 @@ internal fun Cover(
   onDoubleClick: () -> Unit,
   cover: String?,
 ) {
-  AsyncImage(
-    modifier = Modifier
-      .fillMaxSize()
-      .sharedCoverElementModifier(bookId)
-      .pointerInput(Unit) {
-        detectTapGestures(
-          onDoubleTap = {
-            onDoubleClick()
-          },
-        )
-      }
-      .clip(RoundedCornerShape(20.dp)),
-    contentScale = ContentScale.Crop,
-    model = cover,
-    placeholder = painterResource(id = UiR.drawable.album_art),
-    error = painterResource(id = UiR.drawable.album_art),
-    contentDescription = stringResource(id = StringsR.string.cover_title),
-  )
+  Box(
+    modifier = Modifier.fillMaxSize(),
+    contentAlignment = Alignment.Center,
+  ) {
+    AsyncImage(
+      modifier = Modifier
+        .fillMaxSize()
+        .sharedCoverElementModifier(bookId)
+        .pointerInput(Unit) {
+          detectTapGestures(
+            onDoubleTap = {
+              onDoubleClick()
+            },
+          )
+        }
+        .clip(RoundedCornerShape(20.dp)),
+      contentScale = ContentScale.Fit,
+      model = cover,
+      placeholder = painterResource(id = UiR.drawable.album_art),
+      error = painterResource(id = UiR.drawable.album_art),
+      contentDescription = stringResource(id = StringsR.string.cover_title),
+    )
+  }
 }

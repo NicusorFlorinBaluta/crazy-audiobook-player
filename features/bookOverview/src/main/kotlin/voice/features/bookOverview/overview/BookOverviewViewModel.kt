@@ -27,6 +27,7 @@ import voice.core.data.Book
 import voice.core.data.BookId
 import voice.core.data.GridMode
 import voice.core.data.KioskModeDemoData
+import voice.core.data.remote.CrazySyncManager
 import voice.core.data.repo.BookContentRepo
 import voice.core.data.repo.BookRepository
 import voice.core.data.repo.internals.dao.RecentBookSearchDao
@@ -77,6 +78,7 @@ class BookOverviewViewModel(
   private val experimentalPlaybackPersistenceFeatureFlag: FeatureFlag<Boolean>,
   @KioskModeFeatureFlagQualifier
   private val kioskModeFeatureFlag: FeatureFlag<Boolean>,
+  private val crazySyncManager: CrazySyncManager,
   dispatcherProvider: DispatcherProvider,
 ) {
 
@@ -87,6 +89,12 @@ class BookOverviewViewModel(
 
   fun attach() {
     mediaScanner.scan()
+    scope.launch {
+      val result = crazySyncManager.syncCatalog()
+      if (result.isFailure) {
+        // Best-effort background sync
+      }
+    }
   }
 
   @Composable
