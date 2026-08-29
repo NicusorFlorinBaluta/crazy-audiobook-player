@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.datastore.core.DataStore
 import androidx.media3.common.C
+import voice.core.data.displayTitle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaItem.ClippingConfiguration
 import androidx.media3.common.MimeTypes
@@ -116,11 +117,6 @@ class MediaItemProvider(
   }
 
   internal fun playbackItems(book: Book): List<MediaItem> {
-    if (book.content.remoteProjectId != null && !book.content.isDownloaded) {
-      return book.chapters.map { chapter ->
-        mediaItem(chapter, book.content)
-      }
-    }
     return book.playbackItems().map { playbackItem ->
       mediaItem(playbackItem, book.content)
     }
@@ -209,10 +205,11 @@ class MediaItemProvider(
       ClippingConfiguration.UNSET
     }
     val cover = resolveCover(content)
+    val cleanTitle = playbackItem.mark.displayTitle.ifBlank {
+      playbackItem.chapter.name ?: playbackItem.chapter.id.value
+    }
     return MediaItem(
-      title = playbackItem.mark.name
-        ?: playbackItem.chapter.name
-        ?: playbackItem.chapter.id.value,
+      title = cleanTitle,
       album = content.name,
       artist = content.author,
       genre = content.genre,
@@ -225,6 +222,7 @@ class MediaItemProvider(
       durationMs = playbackItem.mark.durationMs,
       clippingConfiguration = clippingConfig,
       mediaType = MediaType.AudioBookChapter,
+      mimeType = if (playbackItem.chapter.id.value.contains(".m4b", ignoreCase = true) || playbackItem.chapter.id.value.contains(".m4a", ignoreCase = true)) MimeTypes.AUDIO_MP4 else null,
     )
   }
 

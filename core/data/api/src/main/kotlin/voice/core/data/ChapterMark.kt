@@ -40,3 +40,24 @@ public fun Chapter.markForPosition(positionInChapterMs: Long): ChapterMark {
   return chapterMarks.find { clampedPositionInChapterMs in it.startMs..it.endMs }
     ?: chapterMarks.first()
 }
+
+public val ChapterMark.displayTitle: String
+  get() {
+    val raw = name ?: ""
+    return when {
+      raw.contains("::") -> raw.substringAfter("::").trim()
+      raw.startsWith("Ch.", ignoreCase = true) && raw.contains(":") -> raw.substringAfter(":").trim()
+      raw.startsWith("Ch.", ignoreCase = true) && raw.contains("-") -> raw.substringAfter("-").trim()
+      else -> raw
+    }
+  }
+
+public val ChapterMark.chapterNumber: Int?
+  get() {
+    val raw = name ?: return null
+    if (raw.contains("::")) {
+      return raw.substringBefore("::").trim().toIntOrNull()
+    }
+    return Regex("""(?:ch\.|chapter)\s*(\d+)""", RegexOption.IGNORE_CASE)
+      .find(raw)?.groupValues?.get(1)?.toIntOrNull()
+  }

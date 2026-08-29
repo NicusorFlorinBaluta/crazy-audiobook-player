@@ -21,6 +21,8 @@ import voice.core.data.remote.CrazySyncManager
 import voice.core.data.Book
 import voice.core.data.BookId
 import voice.core.data.KioskModeDemoData
+import voice.core.data.chapterNumber
+import voice.core.data.displayTitle
 import voice.core.data.durationMs
 import voice.core.data.markForPosition
 import voice.core.data.repo.BookRepository
@@ -114,11 +116,7 @@ class BookPlayViewModel(
       val book = currentBook() ?: return@launch
       val remoteProjectId = book.content.remoteProjectId ?: return@launch
       val currentMark = book.currentChapter.markForPosition(book.content.positionInChapter)
-      val markChapterNum = currentMark.name?.let {
-        Regex("""Ch\.\s*(\d+)""").find(it)?.groupValues?.get(1)?.toIntOrNull()
-          ?: Regex("""Chapter\s+(\d+)""", RegexOption.IGNORE_CASE).find(it)?.groupValues?.get(1)?.toIntOrNull()
-      }
-      val chapterNumber = markChapterNum ?: (book.content.currentChapterIndex + 1)
+      val chapterNumber = currentMark.chapterNumber ?: (book.content.currentChapterIndex + 1)
       lastLoadedKey = null
       loadLyricsAndReader(remoteProjectId, chapterNumber, forceRefresh = true)
     }
@@ -219,11 +217,7 @@ class BookPlayViewModel(
 
     val isCrazyBook = !book.content.remoteProjectId.isNullOrBlank()
     val remoteProjectId = book.content.remoteProjectId
-    val markChapterNum = currentMark.name?.let {
-      Regex("""Ch\.\s*(\d+)""").find(it)?.groupValues?.get(1)?.toIntOrNull()
-        ?: Regex("""Chapter\s+(\d+)""", RegexOption.IGNORE_CASE).find(it)?.groupValues?.get(1)?.toIntOrNull()
-    }
-    val chapterNumber = markChapterNum ?: (book.content.currentChapterIndex + 1)
+    val chapterNumber = currentMark.chapterNumber ?: (book.content.currentChapterIndex + 1)
 
     if (isCrazyBook && remoteProjectId != null) {
       val currentKey = "${remoteProjectId}_ch${chapterNumber}"
@@ -263,7 +257,7 @@ class BookPlayViewModel(
       narrator = book.content.narrator,
       series = book.content.series,
       showPreviousNextButtons = hasMoreThanOneChapter,
-      chapterName = currentMark.name.takeIf { hasMoreThanOneChapter },
+      chapterName = currentMark.displayTitle.takeIf { hasMoreThanOneChapter && it.isNotBlank() },
       duration = currentMark.durationMs.milliseconds,
       playedTime = positionInCurrentMark.milliseconds,
       cover = book.content.coverUrl,
@@ -409,9 +403,8 @@ class BookPlayViewModel(
           val baseDuration = previousChapters.sumOf { it.duration }
           chapter.chapterMarks.map { chapterMark ->
             val currentIndex = globalIndex++
-            val markName = chapterMark.name ?: chapter.name ?: ""
-            val chNumberMatch = Regex("""(?:ch\.|chapter)\s*(\d+)""", RegexOption.IGNORE_CASE).find(markName)
-            val chNumber = chNumberMatch?.groupValues?.get(1)?.toIntOrNull() ?: (currentIndex + 1)
+            val chNumber = chapterMark.chapterNumber ?: (currentIndex + 1)
+            val markName = chapterMark.displayTitle.ifBlank { chapter.name ?: "" }
             BookPlayDialogViewState.SelectChapterDialog.ItemViewState(
               number = chNumber,
               name = markName,

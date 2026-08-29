@@ -321,21 +321,10 @@ class VoicePlayer(
           ) ?: playbackItems.first()
           val mediaItems = mediaItemProvider.playbackItems(book)
           if (mediaItems.isNotEmpty()) {
-            val isRemoteStream = book.content.remoteProjectId != null && !book.content.isDownloaded
-            val targetIndex = if (isRemoteStream) {
-              book.chapters.indexOfFirst { it.id == book.content.currentChapter }.coerceAtLeast(0)
-            } else {
-              currentPlaybackItem.index.coerceIn(0, mediaItems.size - 1)
-            }
-            val targetPosition = if (isRemoteStream) {
-              book.content.positionInChapter
-            } else {
-              currentPlaybackItem.positionInMediaItem(book.content.positionInChapter)
-            }
             player.setMediaItems(
               mediaItems,
-              targetIndex,
-              targetPosition,
+              currentPlaybackItem.index.coerceIn(0, mediaItems.size - 1),
+              currentPlaybackItem.positionInMediaItem(book.content.positionInChapter),
             )
             player.prepare()
           }

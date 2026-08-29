@@ -153,7 +153,7 @@ public class CrazyBookSyncService(
             for (ch in chDetails) {
               val rawTitle = ch.title.replace(Regex("""^Chapter\s+\d+\s*[:\-–]\s*""", RegexOption.IGNORE_CASE), "").trim()
               val cleanTitle = rawTitle.ifBlank { "Chapter ${ch.number}" }
-              val markTitle = if (cleanTitle.startsWith("Ch.", ignoreCase = true)) cleanTitle else "Ch. ${ch.number}: $cleanTitle"
+              val markTitle = "${ch.number}::$cleanTitle"
               marks.add(
                 MarkData(
                   name = markTitle,
@@ -489,7 +489,8 @@ public class CrazyBookSyncService(
 
           for (ch in chDetails) {
             val rawTitle = ch.title.replace(Regex("""^Chapter\s+\d+\s*[:\-–]\s*""", RegexOption.IGNORE_CASE), "").trim()
-            val markTitle = rawTitle.ifBlank { "Chapter ${ch.number}" }
+            val cleanTitle = rawTitle.ifBlank { "Chapter ${ch.number}" }
+            val markTitle = "${ch.number}::$cleanTitle"
             marks.add(
               MarkData(
                 name = markTitle,
