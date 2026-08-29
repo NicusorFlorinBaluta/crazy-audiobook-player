@@ -251,6 +251,101 @@ class BookPlayViewModelTest {
   }
 
   @Test
+  fun `SelectChapterDialog renders clean manuscript names and true chapter numbers`() = scope.runTest {
+    val customChapter = Chapter(
+      id = ChapterId("http://test-part7"),
+      name = "Part 07",
+      duration = 3_500_000,
+      fileLastModified = Instant.EPOCH,
+      markData = listOf(
+        MarkData(startMs = 0, name = "29::Chapter Twenty-Eight"),
+        MarkData(startMs = 600_000, name = "30::Chapter Twenty-Nine"),
+      ),
+      fileSize = 0,
+    )
+    val customBook = Book(
+      content = book.content.copy(
+        chapters = listOf(customChapter.id),
+        currentChapter = customChapter.id,
+        positionInChapter = 10_000,
+      ),
+      chapters = listOf(customChapter),
+    )
+    val customVm = viewModel(book = customBook)
+
+    customVm.onCurrentChapterClick()
+    yield()
+
+    val dialog = customVm.dialogState.value
+    assertIs<BookPlayDialogViewState.SelectChapterDialog>(dialog)
+    assertEquals(expected = 2, actual = dialog.items.size)
+    assertEquals(expected = 29, actual = dialog.items[0].number)
+    assertEquals(expected = "Chapter Twenty-Eight", actual = dialog.items[0].name)
+    assertEquals(expected = 30, actual = dialog.items[1].number)
+    assertEquals(expected = "Chapter Twenty-Nine", actual = dialog.items[1].name)
+  }
+
+  @Test
+  fun `display mode switches between Cover, Lyrics, and Reader`() = scope.runTest {
+    backgroundScope.launchMolecule(RecompositionMode.Immediate) {
+      viewModel.viewState()
+    }.test {
+      var item = awaitItem()
+      while (item == null) {
+        item = awaitItem()
+      }
+      assertEquals(expected = PlayerDisplayMode.Cover, actual = item.displayMode)
+
+      viewModel.setDisplayMode(PlayerDisplayMode.Lyrics)
+      assertEquals(expected = PlayerDisplayMode.Lyrics, actual = awaitItem()?.displayMode)
+
+      viewModel.setDisplayMode(PlayerDisplayMode.Reader)
+      assertEquals(expected = PlayerDisplayMode.Reader, actual = awaitItem()?.displayMode)
+
+      viewModel.setDisplayMode(PlayerDisplayMode.Cover)
+      assertEquals(expected = PlayerDisplayMode.Cover, actual = awaitItem()?.displayMode)
+    }
+  }
+
+  @Test
+  fun `reader theme and font size adjustments operate cleanly within bounds`() = scope.runTest {
+    val crazyBook = book().let { b ->
+      b.copy(content = b.content.copy(remoteProjectId = "crazy-project"))
+    }
+    val crazyVm = viewModel(book = crazyBook)
+
+    backgroundScope.launchMolecule(RecompositionMode.Immediate) {
+      crazyVm.viewState()
+    }.test {
+      var item = awaitItem()
+      while (item == null) {
+        item = awaitItem()
+      }
+
+      crazyVm.setReaderTheme(ReaderTheme.Sepia)
+      assertEquals(expected = ReaderTheme.Sepia, actual = awaitItem()?.readerState?.theme)
+
+      crazyVm.setReaderTheme(ReaderTheme.Oled)
+      assertEquals(expected = ReaderTheme.Oled, actual = awaitItem()?.readerState?.theme)
+
+      crazyVm.setReaderFontSize(20)
+      assertEquals(expected = 20, actual = awaitItem()?.readerState?.fontSizeSp)
+
+      crazyVm.setReaderFontSize(50)
+      assertEquals(expected = 32, actual = awaitItem()?.readerState?.fontSizeSp)
+
+      crazyVm.setReaderFontSize(8)
+      assertEquals(expected = 12, actual = awaitItem()?.readerState?.fontSizeSp)
+
+      crazyVm.toggleAutoFollow(false)
+      assertEquals(expected = false, actual = awaitItem()?.readerState?.autoFollow)
+
+      crazyVm.toggleAutoFollow(true)
+      assertEquals(expected = true, actual = awaitItem()?.readerState?.autoFollow)
+    }
+  }
+
+  @Test
   fun `overlay prefers live controller position`() {
     val persistedBook = book()
     val overlaidBook = persistedBook.overlay(

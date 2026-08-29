@@ -65,9 +65,7 @@ public class CrazyClientFactory {
     if (parsed != null && (parsed.username.isNotEmpty() || parsed.password.isNotEmpty())) {
       val user = parsed.username
       val pass = parsed.password
-      val creds = "$user:$pass"
-      val encoded = Base64.encodeToString(creds.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-      authHeader = "Basic $encoded"
+      authHeader = Credentials.basic(user, pass)
 
       // Rebuild URL without credentials in userinfo
       val cleanUrl = parsed.newBuilder()
