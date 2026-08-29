@@ -93,14 +93,10 @@
     </receiver>
 
     <provider
-      android:name="androidx.core.content.FileProvider"
+      android:name="voice.core.playback.session.CoverContentProvider"
       android:authorities="${applicationId}.coverprovider"
-      android:exported="false"
-      android:grantUriPermissions="true">
-      <meta-data
-        android:name="android.support.FILE_PROVIDER_PATHS"
-        android:resource="@xml/cover_paths" />
-    </provider>
+      android:exported="true"
+      tools:ignore="ExportedContentProvider" />
 
   </application>
 

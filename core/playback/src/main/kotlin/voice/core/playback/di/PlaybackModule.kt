@@ -7,12 +7,17 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSourceBitmapLoader
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.session.CacheBitmapLoader
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaLibraryService
 import dev.zacsweers.metro.ContributesTo
@@ -25,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import voice.core.data.store.CrazyServerUrlStore
+import voice.core.logging.api.Logger
 import voice.core.featureflag.FeatureFlag
 import voice.core.featureflag.Media3AudioOffloadFeatureFlagQualifier
 import voice.core.playback.misc.VolumeGain
@@ -48,30 +54,63 @@ interface PlaybackModule {
     context: Context,
     @CrazyServerUrlStore serverUrlStore: DataStore<String>,
   ): MediaSource.Factory {
-    val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+    val baseHttpFactory = DefaultHttpDataSource.Factory()
       .setAllowCrossProtocolRedirects(true)
       .setConnectTimeoutMs(20000)
       .setReadTimeoutMs(60000)
       .setUserAgent("VoiceAudiobookPlayer/CrazyVoice")
 
-    val rawUrl = try {
-      runBlocking { serverUrlStore.data.first() }
-    } catch (_: Exception) {
-      ""
-    }
+    val dynamicHttpFactory = DataSource.Factory {
+      val delegate = baseHttpFactory.createDataSource()
+      object : HttpDataSource by delegate {
+        override fun open(dataSpec: DataSpec): Long {
+          var uri = dataSpec.uri
+          var authHeader: String? = null
 
-    if (rawUrl.isNotBlank()) {
-      val parsed = rawUrl.toHttpUrlOrNull()
-      if (parsed != null && (parsed.username.isNotEmpty() || parsed.password.isNotEmpty())) {
-        val creds = "${parsed.username}:${parsed.password}"
-        val encoded = Base64.encodeToString(creds.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-        httpDataSourceFactory.setDefaultRequestProperties(
-          mapOf("Authorization" to "Basic $encoded")
-        )
+          val userInfo = uri.userInfo
+          if (!userInfo.isNullOrBlank()) {
+            val encoded = Base64.encodeToString(userInfo.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+            authHeader = "Basic $encoded"
+            val hostPart = uri.host ?: ""
+            val portPart = if (uri.port != -1) ":${uri.port}" else ""
+            uri = uri.buildUpon().encodedAuthority("$hostPart$portPart").build()
+          }
+
+          if (authHeader == null) {
+            val rawUrl = try {
+              runBlocking { serverUrlStore.data.first().trim() }
+            } catch (_: Exception) {
+              ""
+            }
+            var formattedUrl = rawUrl
+            if (formattedUrl.isNotBlank() && !formattedUrl.startsWith("http://") && !formattedUrl.startsWith("https://")) {
+              formattedUrl = if (formattedUrl.startsWith("192.168.") || formattedUrl.startsWith("10.") || formattedUrl.startsWith("localhost")) "http://$formattedUrl" else "https://$formattedUrl"
+            }
+            val httpUrl = formattedUrl.toHttpUrlOrNull()
+            if (httpUrl != null && (httpUrl.username.isNotEmpty() || httpUrl.password.isNotEmpty())) {
+              val creds = "${httpUrl.username}:${httpUrl.password}"
+              val encoded = Base64.encodeToString(creds.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+              authHeader = "Basic $encoded"
+            }
+          }
+
+          if (authHeader != null) {
+            delegate.setRequestProperty("Authorization", authHeader)
+          }
+
+          val cleanDataSpec = if (uri != dataSpec.uri) {
+            dataSpec.buildUpon().setUri(uri).build()
+          } else {
+            dataSpec
+          }
+
+          Logger.d("Streaming DataSource open: uri=${cleanDataSpec.uri}, hasAuth=${authHeader != null}")
+          return delegate.open(cleanDataSpec)
+        }
       }
     }
 
-    val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+    val dataSourceFactory = DefaultDataSource.Factory(context, dynamicHttpFactory)
     val extractorsFactory = DefaultExtractorsFactory()
       .setConstantBitrateSeekingEnabled(true)
     return DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
@@ -134,8 +173,11 @@ interface PlaybackModule {
     mainActivityIntentProvider: MainActivityIntentProvider,
     context: Context,
   ): MediaLibraryService.MediaLibrarySession {
+    @Suppress("DEPRECATION")
+    val bitmapLoader = CacheBitmapLoader(DataSourceBitmapLoader(context))
     return MediaLibraryService.MediaLibrarySession.Builder(service, player, callback)
       .setSessionActivity(mainActivityIntentProvider.toCurrentBook())
+      .setBitmapLoader(bitmapLoader)
       .setMediaButtonPreferences(
         listOf(
           CommandButton.Builder(CommandButton.ICON_SKIP_BACK)

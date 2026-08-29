@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaItem.ClippingConfiguration
+import androidx.media3.common.MimeTypes
 import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.first
@@ -21,6 +22,14 @@ import voice.core.data.repo.BookRepository
 import voice.core.data.repo.ChapterRepo
 import voice.core.data.store.CurrentBookStore
 import voice.core.data.toUri
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
+import java.io.ByteArrayOutputStream
 import java.io.File
 import voice.core.strings.R as StringsR
 
@@ -107,6 +116,11 @@ class MediaItemProvider(
   }
 
   internal fun playbackItems(book: Book): List<MediaItem> {
+    if (book.content.remoteProjectId != null && !book.content.isDownloaded) {
+      return book.chapters.map { chapter ->
+        mediaItem(chapter, book.content)
+      }
+    }
     return book.playbackItems().map { playbackItem ->
       mediaItem(playbackItem, book.content)
     }
@@ -132,33 +146,53 @@ class MediaItemProvider(
     }
   }
 
-  fun mediaItem(book: Book): MediaItem = MediaItem(
-    title = book.content.name,
-    album = book.content.name,
-    artist = book.content.author,
-    genre = book.content.genre,
-    mediaId = MediaId.Book(book.id),
-    browsable = false,
-    isPlayable = true,
-    imageUri = book.content.cover?.toProvidedUri(),
-    mediaType = MediaType.AudioBook,
-  )
+  private val artworkCache = mutableMapOf<String, ByteArray>()
+
+  private fun resolveCover(content: BookContent): File? {
+    val cover = content.cover?.takeIf { it.exists() && it.length() > 0 }
+    if (cover != null) return cover
+    // Fallback: check crazy_covers folder directly if remoteProjectId is present
+    return content.remoteProjectId?.let { pid ->
+      File(application.filesDir, "crazy_covers/$pid.jpg").takeIf { it.exists() && it.length() > 0 }
+    }
+  }
+
+  fun mediaItem(book: Book): MediaItem {
+    val cover = resolveCover(book.content)
+    return MediaItem(
+      title = book.content.name,
+      album = book.content.name,
+      artist = book.content.author,
+      genre = book.content.genre,
+      mediaId = MediaId.Book(book.id),
+      browsable = false,
+      isPlayable = true,
+      imageUri = cover?.toProvidedUri(),
+      artworkData = cover?.toArtworkData(),
+      mediaType = MediaType.AudioBook,
+    )
+  }
 
   private fun mediaItem(
     chapter: Chapter,
     content: BookContent,
-  ) = MediaItem(
-    title = chapter.name ?: chapter.id.value,
-    album = content.name,
-    artist = content.author,
-    genre = content.genre,
-    mediaId = MediaId.Chapter(bookId = content.id, chapterId = chapter.id),
-    browsable = false,
-    isPlayable = true,
-    sourceUri = chapter.id.toUri(),
-    imageUri = content.cover?.toProvidedUri(),
-    mediaType = MediaType.AudioBookChapter,
-  )
+  ): MediaItem {
+    val cover = resolveCover(content)
+    return MediaItem(
+      title = chapter.name ?: chapter.id.value,
+      album = content.name,
+      artist = content.author,
+      genre = content.genre,
+      mediaId = MediaId.Chapter(bookId = content.id, chapterId = chapter.id),
+      browsable = false,
+      isPlayable = true,
+      sourceUri = chapter.id.toUri(),
+      imageUri = cover?.toProvidedUri(),
+      artworkData = cover?.toArtworkData(),
+      mediaType = MediaType.AudioBookChapter,
+      mimeType = if (chapter.id.value.contains(".m4b", ignoreCase = true) || chapter.id.value.contains(".m4a", ignoreCase = true)) MimeTypes.AUDIO_MP4 else null,
+    )
+  }
 
   private fun mediaItem(
     playbackItem: PlaybackItem,
@@ -174,6 +208,7 @@ class MediaItemProvider(
     } else {
       ClippingConfiguration.UNSET
     }
+    val cover = resolveCover(content)
     return MediaItem(
       title = playbackItem.mark.name
         ?: playbackItem.chapter.name
@@ -185,7 +220,8 @@ class MediaItemProvider(
       browsable = false,
       isPlayable = true,
       sourceUri = playbackItem.chapter.id.toUri(),
-      imageUri = content.cover?.toProvidedUri(),
+      imageUri = cover?.toProvidedUri(),
+      artworkData = cover?.toArtworkData(),
       durationMs = playbackItem.mark.durationMs,
       clippingConfiguration = clippingConfig,
       mediaType = MediaType.AudioBookChapter,
@@ -193,4 +229,78 @@ class MediaItemProvider(
   }
 
   private fun File.toProvidedUri(): Uri = imageFileProvider.uri(this)
+
+  private fun File.toArtworkData(): ByteArray? {
+    if (!exists() || length() <= 0) return null
+    val path = absolutePath
+    synchronized(artworkCache) {
+      artworkCache[path]?.let { return it }
+    }
+    return try {
+      val options = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+      }
+      BitmapFactory.decodeFile(path, options)
+      val w = options.outWidth
+      val h = options.outHeight
+      if (w <= 0 || h <= 0) return null
+
+      val cardW = 320
+      val cardH = 375
+
+      val maxDim = maxOf(w, h)
+      var sampleSize = 1
+      while (maxDim / (sampleSize * 2) >= 375) {
+        sampleSize *= 2
+      }
+      val decodeOptions = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+      }
+      val srcBitmap = BitmapFactory.decodeFile(path, decodeOptions) ?: return null
+
+      val compositeBitmap = Bitmap.createBitmap(cardW, cardH, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(compositeBitmap)
+
+      // Ambient blur
+      val tiny = Bitmap.createScaledBitmap(srcBitmap, 16, 20, true)
+      val bgPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+      canvas.drawBitmap(tiny, Rect(0, 0, 16, 20), RectF(0f, 0f, cardW.toFloat(), cardH.toFloat()), bgPaint)
+      tiny.recycle()
+
+      canvas.drawColor(Color.argb(160, 12, 12, 12))
+
+      val maxShowcaseH = 212f
+      val maxShowcaseW = 288f
+      val scale = minOf(maxShowcaseW / srcBitmap.width, maxShowcaseH / srcBitmap.height)
+      val scaledW = (srcBitmap.width * scale).toInt()
+      val scaledH = (srcBitmap.height * scale).toInt()
+      val left = (cardW - scaledW) / 2f
+      val top = 14f
+
+      val borderPaint = Paint().apply {
+        color = Color.argb(70, 255, 255, 255)
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f
+      }
+      canvas.drawRect(left - 1, top - 1, left + scaledW + 1, top + scaledH + 1, borderPaint)
+
+      val srcRect = Rect(0, 0, srcBitmap.width, srcBitmap.height)
+      val dstRect = RectF(left, top, left + scaledW, top + scaledH)
+      val coverPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+      canvas.drawBitmap(srcBitmap, srcRect, dstRect, coverPaint)
+      srcBitmap.recycle()
+
+      val bos = ByteArrayOutputStream()
+      compositeBitmap.compress(Bitmap.CompressFormat.JPEG, 80, bos)
+      compositeBitmap.recycle()
+      val bytes = bos.toByteArray()
+      synchronized(artworkCache) {
+        if (artworkCache.size > 20) artworkCache.clear()
+        artworkCache[path] = bytes
+      }
+      bytes
+    } catch (_: Exception) {
+      null
+    }
+  }
 }

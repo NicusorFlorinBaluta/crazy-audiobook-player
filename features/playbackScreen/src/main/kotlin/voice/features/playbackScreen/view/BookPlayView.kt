@@ -5,14 +5,11 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewParameter
-import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import voice.core.data.BookId
-import voice.core.ui.VoiceTheme
 import voice.features.playbackScreen.BookPlayViewState
+import voice.features.playbackScreen.PlayerDisplayMode
+import voice.features.playbackScreen.ReaderTheme
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
 
 @Composable
 internal fun BookPlayView(
@@ -33,6 +30,13 @@ internal fun BookPlayView(
   onSkipToPrevious: () -> Unit,
   onCloseClick: () -> Unit,
   onCurrentChapterClick: () -> Unit,
+  onDisplayModeChange: (PlayerDisplayMode) -> Unit = {},
+  onSeekToLine: (Long) -> Unit = {},
+  onSeekToParagraph: (Long) -> Unit = {},
+  onUpdateReaderTheme: (ReaderTheme) -> Unit = {},
+  onUpdateReaderFontSize: (Int) -> Unit = {},
+  onToggleAutoFollow: (Boolean) -> Unit = {},
+  onRetrySync: () -> Unit = {},
   snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
   Scaffold(
@@ -64,62 +68,15 @@ internal fun BookPlayView(
         onSkipToNext = onSkipToNext,
         onSkipToPrevious = onSkipToPrevious,
         onCurrentChapterClick = onCurrentChapterClick,
+        onDisplayModeChange = onDisplayModeChange,
+        onSeekToLine = onSeekToLine,
+        onSeekToParagraph = onSeekToParagraph,
+        onUpdateReaderTheme = onUpdateReaderTheme,
+        onUpdateReaderFontSize = onUpdateReaderFontSize,
+        onToggleAutoFollow = onToggleAutoFollow,
+        onRetrySync = onRetrySync,
         useLandscapeLayout = useLandscapeLayout,
       )
     },
   )
-}
-
-@Composable
-@Preview
-private fun BookPlayPreview(
-  @PreviewParameter(BookPlayViewStatePreviewProvider::class)
-  viewState: BookPlayViewState,
-) {
-  VoiceTheme {
-    BookPlayView(
-      viewState = viewState,
-      bookId = BookId("preview"),
-      onPlayClick = {},
-      onRewindClick = {},
-      onFastForwardClick = {},
-      onSeek = {},
-      onSleepTimerClick = {},
-      onBookmarkClick = {},
-      onBookmarkLongClick = {},
-      onSpeedChangeClick = {},
-      onSkipSilenceClick = {},
-      onVolumeBoostClick = {},
-      onSkipToNext = {},
-      onSkipToPrevious = {},
-      onCloseClick = {},
-      onCurrentChapterClick = {},
-      useLandscapeLayout = false,
-    )
-  }
-}
-
-private class BookPlayViewStatePreviewProvider : PreviewParameterProvider<BookPlayViewState> {
-  override val values = sequence {
-    val initial = BookPlayViewState(
-      chapterName = "My Chapter",
-      showPreviousNextButtons = false,
-      cover = null,
-      duration = 10.minutes,
-      playedTime = 3.minutes,
-      playing = true,
-      skipSilence = true,
-      sleepTimerState = BookPlayViewState.SleepTimerViewState.Disabled,
-      title = "Das Ende der Welt",
-    )
-    yield(initial)
-    yield(
-      initial.copy(
-        showPreviousNextButtons = !initial.showPreviousNextButtons,
-        playing = !initial.playing,
-        skipSilence = !initial.skipSilence,
-      ),
-    )
-    yield(initial.copy(chapterName = null))
-  }
 }

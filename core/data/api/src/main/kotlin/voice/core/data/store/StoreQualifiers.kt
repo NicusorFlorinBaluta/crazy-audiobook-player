@@ -52,3 +52,6 @@ public annotation class CrazyServerUrlStore
 
 @Qualifier
 public annotation class CrazyDownloadWifiOnlyStore
+
+@Qualifier
+public annotation class CrazyIgnoredBooksStore

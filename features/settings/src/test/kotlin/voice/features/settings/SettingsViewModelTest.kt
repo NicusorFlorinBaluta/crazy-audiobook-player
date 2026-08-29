@@ -72,6 +72,9 @@ class SettingsViewModelTest {
     kioskModeFeatureFlag = kioskModeFeatureFlag,
     developerMenuUnlockedStore = developerMenuUnlockedStore,
     dynamicColorAvailability = dynamicColorAvailability,
+    crazyServerUrlStore = MemoryDataStore(""),
+    crazyDownloadWifiOnlyStore = MemoryDataStore(true),
+    crazySyncManager = mockk(relaxed = true),
     dispatcherProvider = DispatcherProvider(scope.coroutineContext, scope.coroutineContext, scope.coroutineContext),
   )
 

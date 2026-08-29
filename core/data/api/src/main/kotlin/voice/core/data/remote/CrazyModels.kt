@@ -68,6 +68,9 @@ public data class CrazyDeliveryBatchDto(
   val chapters: List<Int> = emptyList(),
   val status: String = "published",
   @SerialName("download_url") val downloadUrl: String = "",
+  val filename: String = "",
+  @SerialName("duration_seconds") val durationSeconds: Double? = null,
+  @SerialName("chapter_details") val chapterDetails: List<CrazyChapterDto> = emptyList(),
 )
 
 @Serializable
@@ -105,4 +108,42 @@ public data class CrazyProgressRequest(
 public data class CrazyProgressResponse(
   val success: Boolean = true,
   @SerialName("saved_position") val savedPosition: CrazyProgressRequest? = null,
+)
+
+
+@Serializable
+public data class CrazyScriptLineDto(
+  @SerialName("line_id") val lineId: String,
+  val speaker: String = "Narrator",
+  @SerialName("speaker_id") val speakerId: String? = null,
+  val text: String = "",
+  val emotion: String? = null,
+  @SerialName("start_ms") val startMs: Long = 0,
+  @SerialName("end_ms") val endMs: Long = 0,
+)
+
+@Serializable
+public data class CrazyChapterLyricsDto(
+  @SerialName("project_id") val projectId: String,
+  @SerialName("chapter_number") val chapterNumber: Int,
+  @SerialName("chapter_title") val chapterTitle: String = "",
+  val lines: List<CrazyScriptLineDto> = emptyList(),
+)
+
+@Serializable
+public data class CrazyReaderParagraphDto(
+  val index: Int = 0,
+  val text: String = "",
+  @SerialName("start_ms") val startMs: Long = 0,
+  @SerialName("end_ms") val endMs: Long = 0,
+)
+
+@Serializable
+public data class CrazyChapterReaderDto(
+  @SerialName("project_id") val projectId: String,
+  @SerialName("chapter_number") val chapterNumber: Int,
+  val title: String = "",
+  @SerialName("source_heading") val sourceHeading: String = "",
+  @SerialName("total_paragraphs") val totalParagraphs: Int = 0,
+  val paragraphs: List<CrazyReaderParagraphDto> = emptyList(),
 )

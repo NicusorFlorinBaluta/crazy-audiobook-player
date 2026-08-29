@@ -1,3 +1,20 @@
+# Crazy Audiobook Player (Voice Companion)
+
+**A high-performance Android companion player for Crazy Audiobook Creator & 24/7 NAS Streamer.**
+
+Built on AndroidX Media3 and Jetpack Compose, featuring:
+- **24/7 Remote Progressive M4B/AAC Streaming** with dynamic HTTP Basic Auth and RFC 7233 range requests.
+- **Synchronized Karaoke Script / Lyrics Viewer** with real-time speaker badges, emotion tags, auto-scroll, and tap-to-seek.
+- **Synchronized Ebook Reader** with prose paragraphs, font scaling, 4 color themes (Light, Sepia, Dark, OLED), and "Play from here".
+- **Multi-Part Delivery & Chapter Mark Support** with millisecond-accurate seek resolution.
+- **Offline Downloads** with automatic pre-caching of audio, scripts, and reader text.
+- **24/7 Two-Way Progress Sync** to TrueNAS / Creator server.
+- **Full Android Auto Integration**.
+
+👉 See [CRAZY_VOICE_GUIDE.md](CRAZY_VOICE_GUIDE.md) for full configuration, endpoints, and architectural documentation.
+
+---
+
 # Voice
 
 [![CI](https://github.com/PaulWoitaschek/Voice/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/PaulWoitaschek/Voice/actions/workflows/ci.yml)

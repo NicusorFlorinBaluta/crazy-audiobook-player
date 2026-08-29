@@ -73,6 +73,12 @@ fun BookPlayScreen(bookId: BookId) {
     onSkipToNext = viewModel::next,
     onSkipToPrevious = viewModel::previous,
     onCurrentChapterClick = viewModel::onCurrentChapterClick,
+    onDisplayModeChange = viewModel::setDisplayMode,
+    onSeekToLine = viewModel::seekToPositionMs,
+    onSeekToParagraph = viewModel::seekToPositionMs,
+    onUpdateReaderTheme = viewModel::setReaderTheme,
+    onUpdateReaderFontSize = viewModel::setReaderFontSize,
+    onToggleAutoFollow = viewModel::toggleAutoFollow,
     useLandscapeLayout = LocalConfiguration.current.orientation == ORIENTATION_LANDSCAPE,
     snackbarHostState = snackbarHostState,
   )

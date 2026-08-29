@@ -32,4 +32,16 @@ public interface CrazyAudiobookApi {
   public suspend fun getProgress(
     @Path("projectId") projectId: String,
   ): Response<CrazyProgressResponse>
+
+  @GET("api/mobile/v1/books/{projectId}/chapters/{chapterNum}/lyrics")
+  public suspend fun getChapterLyrics(
+    @Path("projectId") projectId: String,
+    @Path("chapterNum") chapterNum: Int,
+  ): Response<CrazyChapterLyricsDto>
+
+  @GET("api/mobile/v1/books/{projectId}/chapters/{chapterNum}/reader")
+  public suspend fun getChapterReader(
+    @Path("projectId") projectId: String,
+    @Path("chapterNum") chapterNum: Int,
+  ): Response<CrazyChapterReaderDto>
 }

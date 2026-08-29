@@ -18,6 +18,7 @@ import voice.core.data.GridMode
 import voice.core.data.ThemeColorScheme
 import voice.core.data.ThemeMode
 import voice.core.data.remote.CrazyBookSyncService
+import kotlinx.serialization.builtins.SetSerializer
 import voice.core.data.remote.CrazySyncManager
 import voice.core.data.sleeptimer.SleepTimerPreference
 import voice.core.featureflag.FeatureFlagOverride
@@ -223,6 +224,17 @@ public interface StoreModule {
   @CrazyDownloadWifiOnlyStore
   private fun crazyDownloadWifiOnly(factory: VoiceDataStoreFactory): DataStore<Boolean> {
     return factory.boolean("crazyDownloadWifiOnly", defaultValue = true)
+  }
+
+  @Provides
+  @SingleIn(AppScope::class)
+  @CrazyIgnoredBooksStore
+  private fun crazyIgnoredBooks(factory: VoiceDataStoreFactory): DataStore<Set<String>> {
+    return factory.create(
+      serializer = SetSerializer(String.serializer()),
+      fileName = "crazyIgnoredBooks",
+      defaultValue = emptySet(),
+    )
   }
 
   @Provides

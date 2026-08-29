@@ -18,7 +18,11 @@ import androidx.core.net.toUri
 import androidx.datastore.core.DataStore
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.minutes
 import voice.core.common.AppInfoProvider
 import voice.core.common.DispatcherProvider
 import voice.core.common.MainScope
@@ -87,12 +91,18 @@ class BookOverviewViewModel(
   private var query by mutableStateOf("")
   private var dialog by mutableStateOf<BookOverviewViewState.Dialog?>(null)
 
+  private var syncJob: Job? = null
+
   fun attach() {
     mediaScanner.scan()
-    scope.launch {
-      val result = crazySyncManager.syncCatalog()
-      if (result.isFailure) {
-        // Best-effort background sync
+    syncJob?.cancel()
+    syncJob = scope.launch {
+      while (isActive) {
+        val result = crazySyncManager.syncCatalog()
+        if (result.isFailure) {
+          // Best-effort background sync
+        }
+        delay(10.minutes)
       }
     }
   }

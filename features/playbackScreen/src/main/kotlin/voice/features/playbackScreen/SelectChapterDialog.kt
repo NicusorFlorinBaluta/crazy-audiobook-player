@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ListItem
@@ -43,7 +44,7 @@ internal fun SelectChapterDialog(
       LazyColumn(
         state = rememberLazyListState(initialFirstVisibleItemIndex = initialFirstVisibleItemIndex),
         content = {
-          items(dialogState.items) { chapter ->
+          itemsIndexed(dialogState.items) { index, chapter ->
             val isCurrentChapter = chapter.active
             val description = stringResource(StringsR.string.playback_chapter_current_content_description)
             val backgroundColor = if (chapter.active) {
@@ -61,7 +62,7 @@ internal fun SelectChapterDialog(
                   if (isCurrentChapter) contentDescription = description
                 }
                 .clickable {
-                  viewModel.onChapterClick(number = chapter.number)
+                  viewModel.onChapterClick(index = index)
                 },
               headlineContent = {
                 Text(text = chapter.name)

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import voice.core.common.DispatcherProvider
 import voice.core.common.MainScope
+import voice.core.data.remote.CrazySyncManager
 import voice.core.data.Book
 import voice.core.data.BookId
 import voice.core.data.KioskModeDemoData
@@ -71,6 +72,7 @@ class BookPlayViewModel(
   private val experimentalPlaybackPersistenceFeatureFlag: FeatureFlag<Boolean>,
   @KioskModeFeatureFlagQualifier
   private val kioskModeFeatureFlag: FeatureFlag<Boolean>,
+  private val crazySyncManager: CrazySyncManager,
   @Assisted
   private val bookId: BookId,
 ) {
@@ -83,10 +85,100 @@ class BookPlayViewModel(
   internal val dialogState: State<BookPlayDialogViewState?>
     field = mutableStateOf<BookPlayDialogViewState?>(null)
 
+  private val displayMode = mutableStateOf(PlayerDisplayMode.Cover)
+  private val readerTheme = mutableStateOf(ReaderTheme.Sepia)
+  private val readerFontSize = mutableStateOf(18)
+  private val readerAutoFollow = mutableStateOf(true)
+
+  private val lyricsState = mutableStateOf<LyricsViewState?>(null)
+  private val readerState = mutableStateOf<ReaderViewState?>(null)
+  private var lastLoadedKey: String? = null
+
   init {
     scope.launch {
       player.pauseIfCurrentBookDifferentFrom(bookId)
       currentBookStoreId.updateData { bookId }
+    }
+  }
+
+  fun setDisplayMode(mode: PlayerDisplayMode) {
+    displayMode.value = mode
+    if ((mode == PlayerDisplayMode.Lyrics && lyricsState.value?.errorMessage != null) ||
+        (mode == PlayerDisplayMode.Reader && readerState.value?.errorMessage != null)) {
+      retryLyricsAndReader()
+    }
+  }
+
+  fun retryLyricsAndReader() {
+    scope.launch {
+      val book = currentBook() ?: return@launch
+      val remoteProjectId = book.content.remoteProjectId ?: return@launch
+      val currentMark = book.currentChapter.markForPosition(book.content.positionInChapter)
+      val markChapterNum = currentMark.name?.let {
+        Regex("""Ch\.\s*(\d+)""").find(it)?.groupValues?.get(1)?.toIntOrNull()
+          ?: Regex("""Chapter\s+(\d+)""", RegexOption.IGNORE_CASE).find(it)?.groupValues?.get(1)?.toIntOrNull()
+      }
+      val chapterNumber = markChapterNum ?: (book.content.currentChapterIndex + 1)
+      lastLoadedKey = null
+      loadLyricsAndReader(remoteProjectId, chapterNumber, forceRefresh = true)
+    }
+  }
+
+  fun setReaderTheme(theme: ReaderTheme) {
+    readerTheme.value = theme
+  }
+
+  fun setReaderFontSize(sizeSp: Int) {
+    readerFontSize.value = sizeSp.coerceIn(12, 32)
+  }
+
+  fun toggleAutoFollow(enabled: Boolean) {
+    readerAutoFollow.value = enabled
+  }
+
+  fun seekToPositionMs(positionMs: Long) {
+    scope.launch {
+      val book = currentBook() ?: return@launch
+      val currentChapter = book.currentChapter
+      val currentMark = currentChapter.markForPosition(book.content.positionInChapter)
+      player.setPosition(currentMark.startMs + positionMs, currentChapter.id)
+    }
+  }
+
+  private fun loadLyricsAndReader(projectId: String, chapterNumber: Int, forceRefresh: Boolean = false) {
+    scope.launch {
+      lyricsState.value = lyricsState.value?.copy(isLoading = true, errorMessage = null) ?: LyricsViewState(isLoading = true)
+      readerState.value = readerState.value?.copy(isLoading = true, errorMessage = null) ?: ReaderViewState(isLoading = true)
+
+      val lyricsRes = crazySyncManager.getChapterLyrics(projectId, chapterNumber, forceRefresh)
+      lyricsRes.onSuccess { dto ->
+        lyricsState.value = LyricsViewState(
+          lines = dto.lines,
+          isLoading = false,
+        )
+      }.onFailure { err ->
+        lyricsState.value = LyricsViewState(
+          isLoading = false,
+          errorMessage = err.localizedMessage ?: "Failed to sync script with server",
+        )
+      }
+
+      val readerRes = crazySyncManager.getChapterReader(projectId, chapterNumber, forceRefresh)
+      readerRes.onSuccess { dto ->
+        readerState.value = ReaderViewState(
+          title = dto.title.ifEmpty { dto.sourceHeading },
+          paragraphs = dto.paragraphs,
+          fontSizeSp = readerFontSize.value,
+          theme = readerTheme.value,
+          autoFollow = readerAutoFollow.value,
+          isLoading = false,
+        )
+      }.onFailure { err ->
+        readerState.value = ReaderViewState(
+          isLoading = false,
+          errorMessage = err.localizedMessage ?: "Failed to sync ebook with server",
+        )
+      }
     }
   }
 
@@ -125,6 +217,42 @@ class BookPlayViewModel(
       book.content.positionInChapter - currentMark.startMs
     }
 
+    val isCrazyBook = !book.content.remoteProjectId.isNullOrBlank()
+    val remoteProjectId = book.content.remoteProjectId
+    val markChapterNum = currentMark.name?.let {
+      Regex("""Ch\.\s*(\d+)""").find(it)?.groupValues?.get(1)?.toIntOrNull()
+        ?: Regex("""Chapter\s+(\d+)""", RegexOption.IGNORE_CASE).find(it)?.groupValues?.get(1)?.toIntOrNull()
+    }
+    val chapterNumber = markChapterNum ?: (book.content.currentChapterIndex + 1)
+
+    if (isCrazyBook && remoteProjectId != null) {
+      val currentKey = "${remoteProjectId}_ch${chapterNumber}"
+      if (lastLoadedKey != currentKey) {
+        lastLoadedKey = currentKey
+        loadLyricsAndReader(remoteProjectId, chapterNumber)
+      }
+    }
+
+    val currentPosMs = positionInCurrentMark
+
+    val activeLineIdx = lyricsState.value?.lines?.let { lines ->
+      val found = lines.indexOfLast { currentPosMs >= it.startMs && currentPosMs < it.endMs }
+      if (found >= 0) found else lines.indexOfLast { currentPosMs >= it.startMs }
+    } ?: -1
+
+    val activeParagraphIdx = readerState.value?.paragraphs?.let { paras ->
+      val found = paras.indexOfLast { currentPosMs >= it.startMs && currentPosMs < it.endMs }
+      if (found >= 0) found else paras.indexOfLast { currentPosMs >= it.startMs }
+    } ?: -1
+
+    val currentLyrics = lyricsState.value?.copy(activeLineIndex = activeLineIdx)
+    val currentReader = readerState.value?.copy(
+      activeParagraphIndex = activeParagraphIdx,
+      fontSizeSp = readerFontSize.value,
+      theme = readerTheme.value,
+      autoFollow = readerAutoFollow.value,
+    )
+
     val sleepTime = remember { sleepTimer.state }.collectAsState().value
     val hasMoreThanOneChapter = book.chapters.sumOf { it.chapterMarks.count() } > 1
     return BookPlayViewState(
@@ -140,6 +268,10 @@ class BookPlayViewModel(
       playedTime = positionInCurrentMark.milliseconds,
       cover = book.content.coverUrl,
       skipSilence = book.content.skipSilence,
+      displayMode = displayMode.value,
+      lyricsState = currentLyrics,
+      readerState = currentReader,
+      isCrazyBook = isCrazyBook,
     )
   }
 
@@ -159,6 +291,10 @@ class BookPlayViewModel(
       playedTime = 10.hours + 24.minutes,
       cover = book.coverUrl,
       skipSilence = false,
+      displayMode = PlayerDisplayMode.Cover,
+      lyricsState = null,
+      readerState = null,
+      isCrazyBook = false,
     )
   }
 
@@ -266,20 +402,21 @@ class BookPlayViewModel(
   fun onCurrentChapterClick() {
     scope.launch {
       val book = currentBook() ?: return@launch
+      var globalIndex = 0
       dialogState.value = BookPlayDialogViewState.SelectChapterDialog(
         items = book.chapters.flatMapIndexed { chapterIndex, chapter ->
-          chapter.chapterMarks.mapIndexed { markIndex, chapterMark ->
-            val previousChapters = book.chapters.take(chapterIndex)
+          val previousChapters = book.chapters.take(chapterIndex)
+          val baseDuration = previousChapters.sumOf { it.duration }
+          chapter.chapterMarks.map { chapterMark ->
+            val currentIndex = globalIndex++
             val markName = chapterMark.name ?: chapter.name ?: ""
-            val chNumberMatch = Regex("""(?:chapter|ch\.?)\s*(\d+)""", RegexOption.IGNORE_CASE).find(markName)
-              ?: Regex("""(?:chapter|ch\.?)\s*(\d+)""", RegexOption.IGNORE_CASE).find(chapter.id.value)
-            val chNumber = chNumberMatch?.groupValues?.get(1)?.toIntOrNull()
-              ?: (previousChapters.sumOf { it.chapterMarks.count() } + markIndex + 1)
+            val chNumberMatch = Regex("""(?:ch\.|chapter)\s*(\d+)""", RegexOption.IGNORE_CASE).find(markName)
+            val chNumber = chNumberMatch?.groupValues?.get(1)?.toIntOrNull() ?: (currentIndex + 1)
             BookPlayDialogViewState.SelectChapterDialog.ItemViewState(
               number = chNumber,
               name = markName,
               active = chapterMark == book.currentMark && chapter == book.currentChapter,
-              time = formatTime(previousChapters.sumOf { it.duration } + chapterMark.startMs),
+              time = formatTime(baseDuration + chapterMark.startMs),
             )
           }
         },
@@ -287,16 +424,20 @@ class BookPlayViewModel(
     }
   }
 
-  fun onChapterClick(number: Int) {
+  fun onChapterClick(index: Int = -1, number: Int = -1) {
+    val targetIndex = when {
+      index >= 0 -> index
+      number > 0 -> number - 1
+      else -> 0
+    }
     scope.launch {
       val book = currentBook() ?: return@launch
       val allMarks = book.chapters.flatMap { ch -> ch.chapterMarks.map { mark -> ch to mark } }
-      val target = allMarks.firstOrNull { (ch, mark) ->
+      val target = allMarks.getOrNull(targetIndex) ?: allMarks.firstOrNull { (ch, mark) ->
         val markName = mark.name ?: ch.name ?: ""
-        val match = Regex("""(?:chapter|ch\.?)\s*(\d+)""", RegexOption.IGNORE_CASE).find(markName)
-          ?: Regex("""(?:chapter|ch\.?)\s*(\d+)""", RegexOption.IGNORE_CASE).find(ch.id.value)
-        match?.groupValues?.get(1)?.toIntOrNull() == number
-      } ?: allMarks.getOrNull(number - 1)
+        val match = Regex("""(?:ch\.|chapter)\s*(\d+)""", RegexOption.IGNORE_CASE).find(markName)
+        match?.groupValues?.get(1)?.toIntOrNull() == (targetIndex + 1)
+      }
 
       if (target != null) {
         val (chapter, mark) = target

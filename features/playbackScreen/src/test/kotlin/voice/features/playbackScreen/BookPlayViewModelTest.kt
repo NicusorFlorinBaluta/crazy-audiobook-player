@@ -1,5 +1,13 @@
 package voice.features.playbackScreen
 
+import voice.core.data.remote.CrazyChapterLyricsDto
+import voice.core.data.remote.CrazyChapterReaderDto
+import voice.core.data.remote.CrazyReaderParagraphDto
+import voice.core.data.remote.CrazyScriptLineDto
+import voice.core.data.remote.CrazySyncManager
+import voice.features.playbackScreen.PlayerDisplayMode
+import voice.features.playbackScreen.ReaderTheme
+
 import app.cash.molecule.RecompositionMode
 import app.cash.molecule.launchMolecule
 import app.cash.turbine.test
@@ -25,6 +33,7 @@ import voice.core.data.Chapter
 import voice.core.data.ChapterId
 import voice.core.data.KioskModeDemoData
 import voice.core.data.MarkData
+import voice.core.data.markForPosition
 import voice.core.data.sleeptimer.SleepTimerPreference
 import voice.core.featureflag.MemoryFeatureFlag
 import voice.core.playback.CurrentBookResolver
@@ -84,7 +93,7 @@ class BookPlayViewModelTest {
       coEvery { get(book.id) } returns book
       every { flow(book.id) } returns MutableStateFlow(book)
     },
-    currentBookResolver = currentBookResolver,
+    currentBookResolver = mockk { coEvery { book(book.id) } returns book },
     player = player.apply {
       every { pauseIfCurrentBookDifferentFrom(book.id) } just Runs
     },
@@ -110,6 +119,7 @@ class BookPlayViewModelTest {
     dispatcherProvider = DispatcherProvider(scope.coroutineContext, scope.coroutineContext, scope.coroutineContext),
     experimentalPlaybackPersistenceFeatureFlag = MemoryFeatureFlag(false),
     kioskModeFeatureFlag = MemoryFeatureFlag(false),
+    crazySyncManager = mockk(relaxed = true),
   )
 
   @Test
@@ -320,23 +330,184 @@ class BookPlayViewModelTest {
     }
   }
 
+  @Test
+  fun `viewState switches display modes between Cover, Lyrics, and Reader`() = scope.runTest {
+    val crazyBook = book.copy(
+      content = book.content.copy(remoteProjectId = "test_project")
+    )
+    val viewModel = viewModel(book = crazyBook)
+
+    backgroundScope.launchMolecule(RecompositionMode.Immediate) {
+      viewModel.viewState()
+    }.test {
+      skipItems(1) // initial null
+      val initial = awaitItem()!!
+      assertEquals(expected = PlayerDisplayMode.Cover, actual = initial.displayMode)
+      assertEquals(expected = true, actual = initial.isCrazyBook)
+
+      viewModel.setDisplayMode(PlayerDisplayMode.Lyrics)
+      assertEquals(expected = PlayerDisplayMode.Lyrics, actual = awaitItem()!!.displayMode)
+
+      viewModel.setDisplayMode(PlayerDisplayMode.Reader)
+      assertEquals(expected = PlayerDisplayMode.Reader, actual = awaitItem()!!.displayMode)
+
+      viewModel.setDisplayMode(PlayerDisplayMode.Cover)
+      assertEquals(expected = PlayerDisplayMode.Cover, actual = awaitItem()!!.displayMode)
+    }
+  }
+
+  @Test
+  fun `viewState synchronizes active lyrics line and seeks to line timing`() = scope.runTest {
+    val crazyBook = book.copy(
+      content = book.content.copy(
+        remoteProjectId = "emberdark",
+        positionInChapter = 55000L,
+      )
+    )
+
+    val mockSync = mockk<CrazySyncManager> {
+      coEvery { getChapterLyrics(any(), any()) } returns Result.success(
+        CrazyChapterLyricsDto(
+          projectId = "emberdark",
+          chapterNumber = 1,
+          chapterTitle = "Prologue",
+          lines = listOf(
+            CrazyScriptLineDto(lineId = "l1", speaker = "Narrator", text = "Line 1", startMs = 53450, endMs = 64170),
+            CrazyScriptLineDto(lineId = "l2", speaker = "Starling", text = "Line 2", startMs = 65070, endMs = 68590),
+          )
+        )
+      )
+      coEvery { getChapterReader(any(), any()) } returns Result.success(
+        CrazyChapterReaderDto(projectId = "emberdark", chapterNumber = 1)
+      )
+    }
+
+    val playerMock = mockk<PlayerController>(relaxed = true) {
+      every { pauseIfCurrentBookDifferentFrom(any()) } just Runs
+      every { livePlaybackStateFlow(any()) } returns MutableStateFlow(null)
+    }
+
+    val viewModel = viewModel(
+      book = crazyBook,
+      playerMock = playerMock,
+      crazySyncManager = mockSync,
+    )
+
+    backgroundScope.launchMolecule(RecompositionMode.Immediate) {
+      viewModel.viewState()
+    }.test {
+      skipItems(1)
+      var item = awaitItem()!!
+      // Wait until lyrics are populated
+      while (item.lyricsState?.lines.isNullOrEmpty()) {
+        item = awaitItem()!!
+      }
+
+      val lyrics = item.lyricsState
+      assertEquals(expected = 2, actual = lyrics.lines.size)
+      assertEquals(expected = 0, actual = lyrics.activeLineIndex) // 55000ms is in Line 1 (53450..64170)
+
+      // Test seekToPositionMs
+      viewModel.seekToPositionMs(65070L)
+      yield()
+      val markStart = crazyBook.currentChapter.markForPosition(crazyBook.content.positionInChapter).startMs
+      verify { playerMock.setPosition(markStart + 65070L, any()) }
+    }
+  }
+
+  @Test
+  fun `viewState synchronizes active reader paragraph and adjusts typography settings`() = scope.runTest {
+    val crazyBook = book.copy(
+      content = book.content.copy(
+        remoteProjectId = "emberdark",
+        positionInChapter = 66000L,
+      )
+    )
+
+    val mockSync = mockk<CrazySyncManager> {
+      coEvery { getChapterLyrics(any(), any()) } returns Result.success(
+        CrazyChapterLyricsDto(projectId = "emberdark", chapterNumber = 1)
+      )
+      coEvery { getChapterReader(any(), any()) } returns Result.success(
+        CrazyChapterReaderDto(
+          projectId = "emberdark",
+          chapterNumber = 1,
+          title = "Prologue",
+          paragraphs = listOf(
+            CrazyReaderParagraphDto(index = 0, text = "Paragraph 1", startMs = 53450, endMs = 64170),
+            CrazyReaderParagraphDto(index = 1, text = "Paragraph 2", startMs = 65070, endMs = 68590),
+          )
+        )
+      )
+    }
+
+    val playerMock = mockk<PlayerController>(relaxed = true) {
+      every { pauseIfCurrentBookDifferentFrom(any()) } just Runs
+      every { livePlaybackStateFlow(any()) } returns MutableStateFlow(null)
+    }
+
+    val viewModel = viewModel(
+      book = crazyBook,
+      playerMock = playerMock,
+      crazySyncManager = mockSync,
+    )
+
+    backgroundScope.launchMolecule(RecompositionMode.Immediate) {
+      viewModel.viewState()
+    }.test {
+      skipItems(1)
+      var item = awaitItem()!!
+      while (item.readerState?.paragraphs.isNullOrEmpty()) {
+        item = awaitItem()!!
+      }
+
+      val reader = item.readerState
+      assertEquals(expected = 2, actual = reader.paragraphs.size)
+      assertEquals(expected = 1, actual = reader.activeParagraphIndex) // 66000ms is in Paragraph 2 (65070..68590)
+
+      // Test font size change
+      viewModel.setReaderFontSize(24)
+      assertEquals(expected = 24, actual = awaitItem()!!.readerState?.fontSizeSp)
+
+      // Test theme change
+      viewModel.setReaderTheme(ReaderTheme.Dark)
+      assertEquals(expected = ReaderTheme.Dark, actual = awaitItem()!!.readerState?.theme)
+
+      // Test auto-follow toggle
+      viewModel.toggleAutoFollow(false)
+      assertEquals(expected = false, actual = awaitItem()!!.readerState?.autoFollow)
+
+      // Test paragraph tap seek
+      viewModel.seekToPositionMs(53450L)
+      yield()
+      val markStart = crazyBook.currentChapter.markForPosition(crazyBook.content.positionInChapter).startMs
+      verify { playerMock.setPosition(markStart + 53450L, any()) }
+    }
+  }
+
   private fun viewModel(
     book: Book = this.book,
     experimentalPlaybackPersistence: Boolean = false,
     kioskMode: Boolean = false,
     livePlaybackFlow: MutableStateFlow<LivePlaybackState?> = MutableStateFlow(null),
     playStateFlow: MutableStateFlow<PlayStateManager.PlayState> = MutableStateFlow(PlayStateManager.PlayState.Paused),
+    playerMock: PlayerController? = null,
+    crazySyncManager: CrazySyncManager = mockk {
+      coEvery { getChapterLyrics(any(), any()) } returns Result.success(CrazyChapterLyricsDto(projectId = "test", chapterNumber = 1))
+      coEvery { getChapterReader(any(), any()) } returns Result.success(CrazyChapterReaderDto(projectId = "test", chapterNumber = 1))
+    },
   ): BookPlayViewModel {
+    val effectivePlayer = playerMock ?: mockk {
+      every { pauseIfCurrentBookDifferentFrom(book.id) } just Runs
+      every { livePlaybackStateFlow(book.id) } returns livePlaybackFlow
+    }
     return BookPlayViewModel(
       bookRepository = mockk {
         coEvery { get(book.id) } returns book
         every { flow(book.id) } returns MutableStateFlow(book)
       },
-      currentBookResolver = currentBookResolver,
-      player = mockk {
-        every { pauseIfCurrentBookDifferentFrom(book.id) } just Runs
-        every { livePlaybackStateFlow(book.id) } returns livePlaybackFlow
-      },
+      currentBookResolver = mockk { coEvery { book(book.id) } returns book },
+      player = effectivePlayer,
       sleepTimer = sleepTimer,
       playStateManager = mockk {
         every { this@mockk.playStateFlow } returns playStateFlow
@@ -352,6 +523,7 @@ class BookPlayViewModelTest {
       dispatcherProvider = DispatcherProvider(scope.coroutineContext, scope.coroutineContext, scope.coroutineContext),
       experimentalPlaybackPersistenceFeatureFlag = MemoryFeatureFlag(experimentalPlaybackPersistence),
       kioskModeFeatureFlag = MemoryFeatureFlag(kioskMode),
+      crazySyncManager = crazySyncManager,
     )
   }
 }

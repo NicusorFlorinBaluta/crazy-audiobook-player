@@ -34,6 +34,7 @@ interface SettingsListener {
   fun onCrazyServerUrlRowClick()
   fun onCrazyServerUrlChanged(url: String)
   fun syncCrazyAudiobooks()
+  fun restoreRemovedCrazyAudiobooks()
   fun onCrazyDownloadWifiOnlyChange(enabled: Boolean)
 
   companion object {
@@ -65,6 +66,7 @@ interface SettingsListener {
       override fun onCrazyServerUrlRowClick() {}
       override fun onCrazyServerUrlChanged(url: String) {}
       override fun syncCrazyAudiobooks() {}
+      override fun restoreRemovedCrazyAudiobooks() {}
       override fun onCrazyDownloadWifiOnlyChange(enabled: Boolean) {}
     }
   }

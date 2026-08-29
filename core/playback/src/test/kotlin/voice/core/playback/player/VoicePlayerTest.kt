@@ -95,6 +95,7 @@ class VoicePlayerTest {
   private lateinit var currentBook: Book
   private val sleepTimer = FakeSleepTimer()
   private val player = VoicePlayer(
+    application = ApplicationProvider.getApplicationContext(),
     player = internalPlayer,
     repo = mockk {
       coEvery { get(bookId) } answers { currentBook }

@@ -31,18 +31,18 @@ internal fun DeleteBookDialog(
   AlertDialog(
     onDismissRequest = onDismiss,
     title = {
-      Text(stringResource(StringsR.string.book_delete_dialog_title))
+      Text(if (viewState.isRemoteBook) "Remove Audiobook" else stringResource(StringsR.string.book_delete_dialog_title))
     },
     confirmButton = {
       Button(
         onClick = onConfirmDeletion,
-        enabled = viewState.deleteCheckBoxChecked,
+        enabled = viewState.confirmButtonEnabled,
         colors = ButtonDefaults.buttonColors(
           containerColor = MaterialTheme.colorScheme.errorContainer,
           contentColor = MaterialTheme.colorScheme.error,
         ),
       ) {
-        Text(stringResource(id = StringsR.string.common_action_delete))
+        Text(if (viewState.isRemoteBook) "Remove" else stringResource(id = StringsR.string.common_action_delete))
       }
     },
     dismissButton = {
@@ -54,25 +54,33 @@ internal fun DeleteBookDialog(
     },
     text = {
       Column {
-        Text(stringResource(id = StringsR.string.book_delete_dialog_message))
+        if (viewState.isRemoteBook) {
+          Text("Are you sure you want to remove this audiobook from your library? Any downloaded offline chapters will be deleted.")
+          Spacer(modifier = Modifier.heightIn(8.dp))
+          Text(viewState.fileToDelete, style = MaterialTheme.typography.titleMedium)
+          Spacer(modifier = Modifier.heightIn(8.dp))
+          Text("This audiobook will not be re-synced automatically unless restored in Settings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+          Text(stringResource(id = StringsR.string.book_delete_dialog_message))
 
-        Spacer(modifier = Modifier.heightIn(8.dp))
-        Text(viewState.fileToDelete, style = MaterialTheme.typography.bodyLarge)
+          Spacer(modifier = Modifier.heightIn(8.dp))
+          Text(viewState.fileToDelete, style = MaterialTheme.typography.bodyLarge)
 
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier
-            .padding(top = 8.dp)
-            .fillMaxWidth()
-            .clickable {
-              onDeleteCheckBoxCheck(!viewState.deleteCheckBoxChecked)
-            },
-        ) {
-          Checkbox(
-            checked = viewState.deleteCheckBoxChecked,
-            onCheckedChange = onDeleteCheckBoxCheck,
-          )
-          Text(stringResource(id = StringsR.string.book_delete_dialog_confirm_files))
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+              .padding(top = 8.dp)
+              .fillMaxWidth()
+              .clickable {
+                onDeleteCheckBoxCheck(!viewState.deleteCheckBoxChecked)
+              },
+          ) {
+            Checkbox(
+              checked = viewState.deleteCheckBoxChecked,
+              onCheckedChange = onDeleteCheckBoxCheck,
+            )
+            Text(stringResource(id = StringsR.string.book_delete_dialog_confirm_files))
+          }
         }
       }
     },

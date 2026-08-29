@@ -75,12 +75,18 @@ class PlayerController(
   ) = executeAfterPrepare { controller ->
     val bookId = currentBookStoreId.data.first() ?: return@executeAfterPrepare
     val book = bookRepository.get(bookId) ?: return@executeAfterPrepare
-    val playbackItem = book.playbackItemForPosition(
-      chapterId = id,
-      positionInChapterMs = time,
-    )
-    if (playbackItem != null) {
-      controller.seekTo(playbackItem.index, playbackItem.positionInMediaItem(time))
+    val isRemoteStream = book.content.remoteProjectId != null && !book.content.isDownloaded
+    if (isRemoteStream) {
+      val targetIndex = book.chapters.indexOfFirst { it.id == id }.coerceAtLeast(0)
+      controller.seekTo(targetIndex, time)
+    } else {
+      val playbackItem = book.playbackItemForPosition(
+        chapterId = id,
+        positionInChapterMs = time,
+      )
+      if (playbackItem != null) {
+        controller.seekTo(playbackItem.index, playbackItem.positionInMediaItem(time))
+      }
     }
   }
 

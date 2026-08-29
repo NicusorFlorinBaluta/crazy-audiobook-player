@@ -308,6 +308,19 @@ class SettingsViewModel(
     }
   }
 
+  override fun restoreRemovedCrazyAudiobooks() {
+    mainScope.launch {
+      viewEffects.emit(SettingsViewEffect.ShowMessage("Restoring removed audiobooks and syncing catalog..."))
+      val result = crazySyncManager.restoreIgnoredBooks()
+      result.onSuccess { count ->
+        viewEffects.emit(SettingsViewEffect.ShowMessage("Restored! Synced $count audiobooks from server."))
+      }.onFailure { err ->
+        val msg = err.localizedMessage ?: err.message ?: "Unknown error"
+        viewEffects.emit(SettingsViewEffect.ShowMessage("Restore failed: $msg"))
+      }
+    }
+  }
+
   override fun onCrazyDownloadWifiOnlyChange(enabled: Boolean) {
     mainScope.launch {
       crazyDownloadWifiOnlyStore.updateData { enabled }

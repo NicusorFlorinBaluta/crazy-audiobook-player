@@ -53,7 +53,7 @@ public class CrazyClientFactory {
     return buildOkHttpClient(basicAuthHeader)
   }
 
-  private fun parseUrlAndAuth(rawUrl: String): Pair<String, String?> {
+  public fun parseUrlAndAuth(rawUrl: String): Pair<String, String?> {
     var url = rawUrl.trim()
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       url = "http://$url"

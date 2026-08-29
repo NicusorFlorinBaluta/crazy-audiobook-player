@@ -83,6 +83,7 @@ class BookOverviewViewModelTest {
       folderPickerInSettingsFeatureFlag = MemoryFeatureFlag(false),
       experimentalPlaybackPersistenceFeatureFlag = MemoryFeatureFlag(true),
       kioskModeFeatureFlag = MemoryFeatureFlag(false),
+      crazySyncManager = mockk(relaxed = true),
       dispatcherProvider = dispatcherProvider,
     )
 
@@ -148,6 +149,7 @@ class BookOverviewViewModelTest {
       folderPickerInSettingsFeatureFlag = MemoryFeatureFlag(false),
       experimentalPlaybackPersistenceFeatureFlag = MemoryFeatureFlag(false),
       kioskModeFeatureFlag = MemoryFeatureFlag(true),
+      crazySyncManager = mockk(relaxed = true),
       dispatcherProvider = dispatcherProvider,
     )
 
@@ -320,6 +322,7 @@ class BookOverviewViewModelTest {
       folderPickerInSettingsFeatureFlag = folderPickerInSettingsFeatureFlag,
       experimentalPlaybackPersistenceFeatureFlag = MemoryFeatureFlag(false),
       kioskModeFeatureFlag = MemoryFeatureFlag(false),
+      crazySyncManager = mockk(relaxed = true),
       dispatcherProvider = dispatcherProvider,
     )
   }

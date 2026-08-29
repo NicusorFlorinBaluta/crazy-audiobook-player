@@ -1,5 +1,9 @@
 package voice.core.playback.player
 
+import android.app.Application
+import android.widget.Toast
+import kotlinx.coroutines.Dispatchers
+
 import androidx.datastore.core.DataStore
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -38,6 +42,7 @@ import kotlin.time.Duration.Companion.seconds
 
 @Inject
 class VoicePlayer(
+  private val application: Application,
   private val player: Player,
   private val repo: BookRepository,
   @CurrentBookStore
@@ -71,7 +76,13 @@ class VoicePlayer(
     }
 
     override fun onPlayerError(error: PlaybackException) {
-      Logger.e("VoicePlayer onPlayerError: ${error.errorCodeName} (${error.errorCode}): ${error.message}")
+      val msg = "Playback error: ${error.errorCodeName} (${error.errorCode}): ${error.message}"
+      Logger.e(msg)
+      scope.launch(Dispatchers.Main) {
+        try {
+          Toast.makeText(application, msg, Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {}
+      }
     }
 
     private fun pauseAndDisableSleepTimerIfEndOfChapter() {
@@ -310,11 +321,21 @@ class VoicePlayer(
           ) ?: playbackItems.first()
           val mediaItems = mediaItemProvider.playbackItems(book)
           if (mediaItems.isNotEmpty()) {
-            val targetIndex = currentPlaybackItem.index.coerceIn(0, mediaItems.size - 1)
+            val isRemoteStream = book.content.remoteProjectId != null && !book.content.isDownloaded
+            val targetIndex = if (isRemoteStream) {
+              book.chapters.indexOfFirst { it.id == book.content.currentChapter }.coerceAtLeast(0)
+            } else {
+              currentPlaybackItem.index.coerceIn(0, mediaItems.size - 1)
+            }
+            val targetPosition = if (isRemoteStream) {
+              book.content.positionInChapter
+            } else {
+              currentPlaybackItem.positionInMediaItem(book.content.positionInChapter)
+            }
             player.setMediaItems(
               mediaItems,
               targetIndex,
-              currentPlaybackItem.positionInMediaItem(book.content.positionInChapter),
+              targetPosition,
             )
             player.prepare()
           }

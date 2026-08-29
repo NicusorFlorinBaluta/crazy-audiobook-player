@@ -23,11 +23,13 @@ internal fun MediaItem(
   genre: String? = null,
   sourceUri: Uri? = null,
   imageUri: Uri? = null,
+  artworkData: ByteArray? = null,
   durationMs: Long? = null,
   clippingConfiguration: ClippingConfiguration = ClippingConfiguration.UNSET,
   mediaType: MediaType,
+  mimeType: String? = null,
 ): MediaItem {
-  val metadata =
+  val metadataBuilder =
     MediaMetadata.Builder()
       .setAlbumTitle(album)
       .setTitle(title)
@@ -47,14 +49,22 @@ internal fun MediaItem(
           MediaType.AudioBookRoot -> MediaMetadata.MEDIA_TYPE_FOLDER_AUDIO_BOOKS
         },
       )
-      .build()
 
-  return MediaItem.Builder()
+  if (artworkData != null) {
+    metadataBuilder.setArtworkData(artworkData, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+  }
+
+  val metadata = metadataBuilder.build()
+
+  val builder = MediaItem.Builder()
     .setMediaId(Json.encodeToString(MediaId.serializer(), mediaId))
     .setMediaMetadata(metadata)
     .setUri(sourceUri)
     .setClippingConfiguration(clippingConfiguration)
-    .build()
+  if (mimeType != null) {
+    builder.setMimeType(mimeType)
+  }
+  return builder.build()
 }
 
 fun String.toMediaIdOrNull(): MediaId? = try {

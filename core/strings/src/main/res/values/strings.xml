@@ -280,4 +280,8 @@
     <string name="sleep_timer.dialog.title">Sweet dreams! 🌙</string>
     <!-- Sleep timer option and playback status for stopping at the end of a chapter. -->
     <string name="sleep_timer.end_of_chapter">End of Chapter</string>
+    <!-- Bottom-sheet action for downloading a remote book for offline playback -->
+    <string name="book.action.download_offline">Download for Offline Playback</string>
+    <!-- Bottom-sheet action for deleting downloaded offline audio files -->
+    <string name="book.action.delete_downloaded">Delete Downloaded Offline Audio</string>
 </resources>

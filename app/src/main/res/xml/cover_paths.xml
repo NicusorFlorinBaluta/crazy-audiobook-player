@@ -2,5 +2,8 @@
 <paths>
   <files-path
     name="covers"
-    path="/" />
+    path="." />
+  <files-path
+    name="crazy_covers"
+    path="crazy_covers" />
 </paths>

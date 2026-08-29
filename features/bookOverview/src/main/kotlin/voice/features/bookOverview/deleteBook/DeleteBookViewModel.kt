@@ -9,6 +9,7 @@ import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import voice.core.data.BookId
+import voice.core.data.remote.CrazySyncManager
 import voice.core.data.repo.BookContentRepo
 import voice.core.logging.api.Logger
 import voice.core.scanner.MediaScanTrigger
@@ -23,6 +24,7 @@ class DeleteBookViewModel(
   private val application: Application,
   private val mediaScanTrigger: MediaScanTrigger,
   private val bookContentRepo: BookContentRepo,
+  private val crazySyncManager: CrazySyncManager,
 ) : BottomSheetItemViewModel {
 
   private val scope = MainScope()
@@ -40,8 +42,10 @@ class DeleteBookViewModel(
   ) {
     if (item != BottomSheetItem.DeleteBook) return
 
-    val fileName = if (bookId.value.startsWith("crazy://")) {
-      bookId.value.removePrefix("crazy://")
+    val isCrazy = bookId.value.startsWith("crazy://")
+    val content = bookContentRepo.get(bookId)
+    val displayName = if (isCrazy) {
+      content?.name ?: bookId.value.removePrefix("crazy://")
     } else {
       bookId.toUri().pathSegments
         .let { segments ->
@@ -58,7 +62,8 @@ class DeleteBookViewModel(
     _state.value = DeleteBookViewState(
       id = bookId,
       deleteCheckBoxChecked = false,
-      fileToDelete = fileName,
+      fileToDelete = displayName,
+      isRemoteBook = isCrazy,
     )
   }
 
@@ -78,14 +83,13 @@ class DeleteBookViewModel(
         val bookId = state.id
         if (bookId.value.startsWith("crazy://")) {
           val content = bookContentRepo.get(bookId)
+          val projectId = content?.remoteProjectId ?: bookId.value.removePrefix("crazy://")
+          crazySyncManager.ignoreBook(projectId)
           if (content != null) {
             bookContentRepo.put(content.copy(isActive = false))
-            val projectId = content.remoteProjectId
-            if (projectId != null) {
-              File(application.filesDir, "crazy_downloads/$projectId").deleteRecursively()
-              File(application.filesDir, "crazy_covers/$projectId.jpg").delete()
-            }
           }
+          File(application.filesDir, "crazy_downloads/$projectId").deleteRecursively()
+          File(application.filesDir, "crazy_covers/$projectId.jpg").delete()
         } else {
           val uri = bookId.toUri()
           val documentFile = DocumentFile.fromSingleUri(application, uri)
@@ -102,7 +106,8 @@ data class DeleteBookViewState(
   val id: BookId,
   val deleteCheckBoxChecked: Boolean,
   val fileToDelete: String,
+  val isRemoteBook: Boolean = false,
 ) {
 
-  val confirmButtonEnabled = deleteCheckBoxChecked
+  val confirmButtonEnabled = if (isRemoteBook) true else deleteCheckBoxChecked
 }

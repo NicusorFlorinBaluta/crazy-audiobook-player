@@ -11,6 +11,8 @@ enum class BottomSheetItem(
   @StringRes val titleRes: Int,
   val icon: ImageVector,
 ) {
+  DownloadOffline(StringsR.string.book_action_download_offline, VoiceIcons.Download),
+  DeleteDownloaded(StringsR.string.book_action_delete_downloaded, VoiceIcons.Delete),
   Title(StringsR.string.book_edit_name_label, VoiceIcons.Title),
   InternetCover(StringsR.string.book_edit_cover_internet, VoiceIcons.Download),
   FileCover(StringsR.string.book_edit_cover_file, VoiceIcons.Image),
