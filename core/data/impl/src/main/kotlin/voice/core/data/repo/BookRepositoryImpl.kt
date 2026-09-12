@@ -74,16 +74,21 @@ public class BookRepositoryImpl(
 
   private suspend fun BookContent.book(): Book? {
     warmUp()
+    val loadedChapters = chapters.mapNotNull { chapterId ->
+      val chapter = chapterRepo.get(chapterId)
+      if (chapter == null) {
+        Logger.w("Missing chapter with id=$chapterId for $this")
+        null
+      } else {
+        chapter
+      }
+    }
+    if (loadedChapters.isEmpty() && chapters.isNotEmpty()) {
+      return null
+    }
     return Book(
       content = this,
-      chapters = chapters.map { chapterId ->
-        val chapter = chapterRepo.get(chapterId)
-        if (chapter == null) {
-          Logger.w("Missing chapter with id=$chapterId for $this")
-          return null
-        }
-        chapter
-      },
+      chapters = loadedChapters,
     )
   }
 }

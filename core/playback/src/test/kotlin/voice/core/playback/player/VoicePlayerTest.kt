@@ -64,6 +64,7 @@ class VoicePlayerTest {
 
   private val seekTimeStore = MemoryDataStore(2)
   private val autoRewindAmountStore = MemoryDataStore(2)
+  private val showRemainingTimeStore = MemoryDataStore(true)
 
   private val internalPlayer = TestExoPlayerBuilder(ApplicationProvider.getApplicationContext())
     .setMediaSourceFactory(
@@ -90,7 +91,7 @@ class VoicePlayerTest {
     .build()
 
   private val scope = TestScope()
-  private val mediaItemProvider = MediaItemProvider(mockk(), mockk(), mockk(), mockk(), mockk(), mockk())
+  private val mediaItemProvider = MediaItemProvider(mockk(), mockk(), mockk(), mockk(), mockk(), mockk(), MemoryDataStore(true))
   private val bookId = BookId(Uuid.random().toString())
   private lateinit var currentBook: Book
   private val sleepTimer = FakeSleepTimer()
@@ -98,7 +99,7 @@ class VoicePlayerTest {
     application = ApplicationProvider.getApplicationContext(),
     player = internalPlayer,
     repo = mockk {
-      coEvery { get(bookId) } answers { currentBook }
+      coEvery { get(bookId) } answers { if (::currentBook.isInitialized) currentBook else null }
       coEvery { updateBook(any(), any()) } just Runs
     },
     currentBookStoreId = mockk {
@@ -106,6 +107,7 @@ class VoicePlayerTest {
     },
     seekTimeStore = seekTimeStore,
     autoRewindAmountStore = autoRewindAmountStore,
+    showRemainingTimeStore = showRemainingTimeStore,
     scope = scope,
     mediaItemProvider = mediaItemProvider,
     volumeGain = mockk(relaxed = true),
@@ -366,6 +368,93 @@ class VoicePlayerTest {
     player.pause()
 
     player.shouldHavePosition(1, 0)
+  }
+
+  @Test
+  fun `autoRewind on transient audio focus loss`() = scope.runTest {
+    setMediaItems(
+      listOf(
+        chapter(
+          ChapterMark(startMs = 0, endMs = 11_999, name = null),
+          ChapterMark(startMs = 12_000, endMs = 20_000, name = null),
+        ),
+      ),
+    )
+
+    autoRewindAmountStore.updateData { 2 }
+
+    player.seekTo(1, 5_000)
+    player.prepare()
+    awaitReady()
+    player.shouldHavePosition(1, 5_000)
+
+    player.playerListener.onPlaybackSuppressionReasonChanged(Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS)
+
+    player.shouldHavePosition(1, 3_000)
+  }
+
+  @Test
+  fun `autoRewind on audio focus loss`() = scope.runTest {
+    setMediaItems(
+      listOf(
+        chapter(
+          ChapterMark(startMs = 0, endMs = 11_999, name = null),
+          ChapterMark(startMs = 12_000, endMs = 20_000, name = null),
+        ),
+      ),
+    )
+
+    autoRewindAmountStore.updateData { 3 }
+
+    player.seekTo(1, 5_000)
+    player.prepare()
+    awaitReady()
+    player.shouldHavePosition(1, 5_000)
+
+    player.playerListener.onPlayWhenReadyChanged(false, Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS)
+
+    player.shouldHavePosition(1, 2_000)
+  }
+
+  @Test
+  fun `updateDynamicMetadata formats subtitle with remaining time and notifies listener`() = scope.runTest {
+    setMediaItems(
+      listOf(
+        chapter(
+          ChapterMark(startMs = 0, endMs = 60_000, name = "Intro"),
+        ),
+      ),
+    )
+
+    player.seekTo(0, 15_000)
+    player.prepare()
+    awaitReady()
+
+    var lastMetadata: androidx.media3.common.MediaMetadata? = null
+    val listener = object : Player.Listener {
+      override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+        lastMetadata = mediaMetadata
+      }
+    }
+    player.addListener(listener)
+
+    showRemainingTimeStore.updateData { true }
+    player.updateDynamicMetadata()
+
+    val expectedRemainingSubtitle = "0:15 (-0:45) • ${currentBook.content.name}"
+    assertEquals(expected = expectedRemainingSubtitle, actual = player.mediaMetadata.subtitle?.toString())
+    assertEquals(expected = expectedRemainingSubtitle, actual = lastMetadata?.subtitle?.toString())
+    assertEquals(expected = expectedRemainingSubtitle, actual = player.currentMediaItem?.mediaMetadata?.subtitle?.toString())
+
+    showRemainingTimeStore.updateData { false }
+    player.updateDynamicMetadata()
+
+    val expectedTotalSubtitle = "0:15 / 1:00 • ${currentBook.content.name}"
+    assertEquals(expected = expectedTotalSubtitle, actual = player.mediaMetadata.subtitle?.toString())
+    assertEquals(expected = expectedTotalSubtitle, actual = lastMetadata?.subtitle?.toString())
+    assertEquals(expected = expectedTotalSubtitle, actual = player.currentMediaItem?.mediaMetadata?.subtitle?.toString())
+
+    player.removeListener(listener)
   }
 
   private fun TestScope.setMediaItems(

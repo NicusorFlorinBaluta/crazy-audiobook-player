@@ -108,6 +108,18 @@ public interface StoreModule {
 
   @Provides
   @SingleIn(AppScope::class)
+  @ShowRemainingTimeStore
+  private fun showRemainingTime(
+    factory: VoiceDataStoreFactory,
+  ): DataStore<Boolean> {
+    return factory.boolean(
+      fileName = "showRemainingTime",
+      defaultValue = true,
+    )
+  }
+
+  @Provides
+  @SingleIn(AppScope::class)
   @SleepTimerPreferenceStore
   private fun sleepTimerPreference(factory: VoiceDataStoreFactory): DataStore<SleepTimerPreference> {
     return factory.create(

@@ -28,6 +28,7 @@ import voice.core.data.Book
 import voice.core.data.BookId
 import voice.core.data.repo.BookRepository
 import voice.core.data.store.CurrentBookStore
+import voice.core.data.store.ShowRemainingTimeStore
 import voice.core.logging.api.Logger
 import voice.core.playback.player.VoicePlayer
 import voice.core.playback.session.search.BookSearchHandler
@@ -43,6 +44,8 @@ class LibrarySessionCallback(
   @CurrentBookStore
   private val currentBookStoreId: DataStore<BookId?>,
   private val bookRepository: BookRepository,
+  @ShowRemainingTimeStore
+  private val showRemainingTimeStore: DataStore<Boolean>,
 ) : MediaLibrarySession.Callback {
 
   override fun onAddMediaItems(
@@ -97,13 +100,9 @@ class LibrarySessionCallback(
     browser: ControllerInfo,
     params: LibraryParams?,
   ): ListenableFuture<LibraryResult<MediaItem>> {
-    val mediaItem = if (params?.isRecent == true) {
-      mediaItemProvider.recent() ?: mediaItemProvider.root()
-    } else {
-      mediaItemProvider.root()
-    }
-    Logger.d("onGetLibraryRoot(isRecent=${params?.isRecent == true}). Returning ${mediaItem.mediaId}")
-    return Futures.immediateFuture(LibraryResult.ofItem(mediaItem, params))
+    val rootItem = mediaItemProvider.root()
+    Logger.d("onGetLibraryRoot(isRecent=${params?.isRecent == true}, controller=${browser.packageName}). Returning ${rootItem.mediaId}")
+    return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params))
   }
 
   override fun onGetItem(
@@ -164,13 +163,26 @@ class LibrarySessionCallback(
   ): ConnectionResult {
     Logger.d("onConnect to ${controller.packageName}")
 
-    if (player.playbackState == Player.STATE_IDLE &&
-      controller.packageName == "com.google.android.projection.gearhead"
-    ) {
-      Logger.d("onConnect to ${controller.packageName} and player is idle.")
-      Logger.d("Preparing current book so it shows up as recently played")
+    val isCarController = controller.packageName in listOf(
+      "com.google.android.projection.gearhead",
+      "com.google.android.apps.automotive.templates.host",
+      "com.google.android.carassistant",
+      "com.google.android.gms",
+    )
+    if (isCarController) {
+      Logger.d("onConnect to car controller ${controller.packageName}")
       scope.launch {
-        prepareCurrentBook()
+        // Preload catalog so books are immediately available in memory
+        try {
+          val books = bookRepository.all()
+          Logger.d("Preloaded ${books.size} books on car connect")
+        } catch (_: Exception) {}
+      }
+      if (player.playbackState == Player.STATE_IDLE) {
+        Logger.d("Preparing current book so it shows up as recently played")
+        scope.launch {
+          prepareCurrentBook()
+        }
       }
     }
 
@@ -213,6 +225,11 @@ class LibrarySessionCallback(
       }
       is CustomCommand.SetGain -> {
         player.setGain(command.gain)
+      }
+      CustomCommand.ToggleRemainingTime -> {
+        scope.launch {
+          showRemainingTimeStore.updateData { !it }
+        }
       }
     }
 

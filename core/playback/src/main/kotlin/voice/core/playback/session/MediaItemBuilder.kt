@@ -20,6 +20,7 @@ internal fun MediaItem(
   browsable: Boolean,
   album: String? = null,
   artist: String? = null,
+  subtitle: String? = null,
   genre: String? = null,
   sourceUri: Uri? = null,
   imageUri: Uri? = null,
@@ -34,7 +35,7 @@ internal fun MediaItem(
       .setAlbumTitle(album)
       .setTitle(title)
       .setDisplayTitle(title)
-      .setSubtitle(album ?: artist)
+      .setSubtitle(subtitle ?: album ?: artist)
       .setArtist(artist)
       .setAlbumArtist(artist)
       .setGenre(genre)
@@ -68,7 +69,12 @@ internal fun MediaItem(
 }
 
 fun String.toMediaIdOrNull(): MediaId? = try {
-  Json.decodeFromString(MediaId.serializer(), this)
+  when (this) {
+    "root", "/", "" -> MediaId.Root
+    "allBooks", "books", "library" -> MediaId.AllBooks
+    "recent", "continue" -> MediaId.Recent
+    else -> Json.decodeFromString(MediaId.serializer(), this)
+  }
 } catch (_: SerializationException) {
   null
 }

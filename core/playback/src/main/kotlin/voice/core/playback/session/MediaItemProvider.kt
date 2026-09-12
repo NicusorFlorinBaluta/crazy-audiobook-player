@@ -4,7 +4,9 @@ import android.app.Application
 import android.net.Uri
 import androidx.datastore.core.DataStore
 import androidx.media3.common.C
+import voice.core.common.formatTime
 import voice.core.data.displayTitle
+import voice.core.data.store.ShowRemainingTimeStore
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaItem.ClippingConfiguration
 import androidx.media3.common.MimeTypes
@@ -43,6 +45,8 @@ class MediaItemProvider(
   private val imageFileProvider: ImageFileProvider,
   @CurrentBookStore
   private val currentBookStoreId: DataStore<BookId?>,
+  @ShowRemainingTimeStore
+  private val showRemainingTimeStore: DataStore<Boolean>,
 ) {
 
   fun root(): MediaItem = MediaItem(
@@ -53,20 +57,29 @@ class MediaItemProvider(
     mediaType = MediaType.AudioBookRoot,
   )
 
-  fun recent(): MediaItem? = MediaItem(
+  fun allBooksTab(): MediaItem = MediaItem(
+    title = application.getString(StringsR.string.media_session_library_root),
+    browsable = true,
+    isPlayable = false,
+    mediaId = MediaId.AllBooks,
+    mediaType = MediaType.AudioBookRoot,
+  )
+
+  fun recent(): MediaItem = MediaItem(
     title = application.getString(StringsR.string.media_session_library_recent),
     browsable = true,
     isPlayable = false,
     mediaId = MediaId.Recent,
-    mediaType = MediaType.AudioBook,
-  ).takeIf { runBlocking { currentBookStoreId.data.first() != null } }
+    mediaType = MediaType.AudioBookRoot,
+  )
 
   suspend fun item(id: String): MediaItem? {
     val mediaId = id.toMediaIdOrNull() ?: return null
     return when (mediaId) {
       MediaId.Root -> root()
+      MediaId.AllBooks -> allBooksTab()
       is MediaId.Book -> {
-        bookRepository.get(mediaId.id)?.let(::mediaItem)
+        bookRepository.get(mediaId.id)?.let { mediaItem(it, isBrowseItem = false) }
       }
       is MediaId.Chapter -> {
         val content = contentRepo.get(mediaId.bookId) ?: return null
@@ -107,18 +120,19 @@ class MediaItemProvider(
         val book = bookRepository.get(mediaId.id) ?: return null
         mediaItemsWithStartPosition(book)
       }
-      is MediaId.Chapter, is MediaId.ChapterMark, MediaId.Root, MediaId.Recent, null -> null
+      is MediaId.Chapter, is MediaId.ChapterMark, MediaId.Root, MediaId.Recent, MediaId.AllBooks, null -> null
     }
   }
 
   suspend fun chapters(bookId: BookId): List<MediaItem>? {
     val book = bookRepository.get(bookId) ?: return null
-    return playbackItems(book)
+    val showRemaining = try { showRemainingTimeStore.data.first() } catch (_: Exception) { true }
+    return playbackItems(book, showRemaining)
   }
 
-  internal fun playbackItems(book: Book): List<MediaItem> {
+  internal fun playbackItems(book: Book, showRemaining: Boolean? = null): List<MediaItem> {
     return book.playbackItems().map { playbackItem ->
-      mediaItem(playbackItem, book.content)
+      mediaItem(playbackItem, book.content, showRemaining)
     }
   }
 
@@ -126,18 +140,35 @@ class MediaItemProvider(
     val mediaId = id.toMediaIdOrNull() ?: return null
     return when (mediaId) {
       MediaId.Root -> {
+        // Android Auto expects top-level browsable items as navigation tabs
+        listOf(
+          allBooksTab(),
+          recent(),
+        )
+      }
+      MediaId.AllBooks -> {
         bookRepository.all()
           .sortedWith(BookComparator.ByLastPlayed)
           .map { book ->
-            mediaItem(book)
+            mediaItem(book, isBrowseItem = true)
           }
       }
       is MediaId.Book -> chapters(mediaId.id)
       is MediaId.Chapter, is MediaId.ChapterMark -> null
       MediaId.Recent -> {
-        val bookId = currentBookStoreId.data.first() ?: return null
-        val book = bookRepository.get(bookId) ?: return null
-        listOf(mediaItem(book))
+        val recentBooks = mutableListOf<MediaItem>()
+        val currentBookId = currentBookStoreId.data.first()
+        val currentBook = currentBookId?.let { bookRepository.get(it) }
+        if (currentBook != null) {
+          recentBooks.add(mediaItem(currentBook, isBrowseItem = true))
+        }
+        val otherRecent = bookRepository.all()
+          .sortedWith(BookComparator.ByLastPlayed)
+          .filter { it.id != currentBookId }
+          .take(5)
+          .map { mediaItem(it, isBrowseItem = true) }
+        recentBooks.addAll(otherRecent)
+        recentBooks
       }
     }
   }
@@ -153,18 +184,19 @@ class MediaItemProvider(
     }
   }
 
-  fun mediaItem(book: Book): MediaItem {
+  fun mediaItem(book: Book, isBrowseItem: Boolean = false): MediaItem {
     val cover = resolveCover(book.content)
+    val hasMultipleChapters = book.playbackItems().size > 1
     return MediaItem(
       title = book.content.name,
       album = book.content.name,
       artist = book.content.author,
       genre = book.content.genre,
       mediaId = MediaId.Book(book.id),
-      browsable = false,
+      browsable = if (isBrowseItem) hasMultipleChapters else false,
       isPlayable = true,
       imageUri = cover?.toProvidedUri(),
-      artworkData = cover?.toArtworkData(),
+      artworkData = if (isBrowseItem) null else cover?.toArtworkData(),
       mediaType = MediaType.AudioBook,
     )
   }
@@ -193,6 +225,7 @@ class MediaItemProvider(
   private fun mediaItem(
     playbackItem: PlaybackItem,
     content: BookContent,
+    showRemaining: Boolean? = null,
   ): MediaItem {
     val needsClipping = playbackItem.mark.startMs > 0L ||
       (playbackItem.chapter.chapterMarks.size > 1 && playbackItem.mark.endMs < playbackItem.chapter.duration)
@@ -208,10 +241,29 @@ class MediaItemProvider(
     val cleanTitle = playbackItem.mark.displayTitle.ifBlank {
       playbackItem.chapter.name ?: playbackItem.chapter.id.value
     }
+    val isCurrent = playbackItem.chapter.id == content.currentChapter &&
+      content.positionInChapter in playbackItem.mark.startMs..playbackItem.mark.endMs
+    val durationText = formatTime(playbackItem.mark.durationMs, playbackItem.mark.durationMs)
+    val shouldShowRemaining = showRemaining ?: runBlocking {
+      try { showRemainingTimeStore.data.first() } catch (_: Exception) { true }
+    }
+    val subtitleText = if (isCurrent) {
+      val playedInMark = (content.positionInChapter - playbackItem.mark.startMs).coerceAtLeast(0L)
+      val remainingInMark = (playbackItem.mark.durationMs - playedInMark).coerceAtLeast(0L)
+      val timePart = if (shouldShowRemaining) {
+        "${formatTime(playedInMark, playbackItem.mark.durationMs)} (-${formatTime(remainingInMark, playbackItem.mark.durationMs)})"
+      } else {
+        "${formatTime(playedInMark, playbackItem.mark.durationMs)} / $durationText"
+      }
+      if (content.name.isNotBlank()) "$timePart • ${content.name}" else timePart
+    } else {
+      if (content.name.isNotBlank()) "$durationText • ${content.name}" else durationText
+    }
     return MediaItem(
       title = cleanTitle,
       album = content.name,
       artist = content.author,
+      subtitle = subtitleText,
       genre = content.genre,
       mediaId = playbackItem.mediaId,
       browsable = false,

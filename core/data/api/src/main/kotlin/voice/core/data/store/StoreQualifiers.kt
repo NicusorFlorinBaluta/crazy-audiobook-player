@@ -55,3 +55,6 @@ public annotation class CrazyDownloadWifiOnlyStore
 
 @Qualifier
 public annotation class CrazyIgnoredBooksStore
+
+@Qualifier
+public annotation class ShowRemainingTimeStore

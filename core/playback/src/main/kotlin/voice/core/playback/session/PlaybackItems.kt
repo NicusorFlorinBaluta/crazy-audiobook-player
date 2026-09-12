@@ -72,6 +72,7 @@ internal val MediaId.bookId: BookId?
     is MediaId.ChapterMark -> bookId
     MediaId.Recent,
     MediaId.Root,
+    MediaId.AllBooks,
     -> null
   }
 
@@ -82,6 +83,7 @@ internal val MediaId.realChapterId: ChapterId?
     is MediaId.Book,
     MediaId.Recent,
     MediaId.Root,
+    MediaId.AllBooks,
     -> null
   }
 
@@ -92,6 +94,7 @@ internal fun MediaId.positionInChapter(positionInCurrentMediaItemMs: Long): Long
     is MediaId.Book,
     MediaId.Recent,
     MediaId.Root,
+    MediaId.AllBooks,
     -> null
   }
 }

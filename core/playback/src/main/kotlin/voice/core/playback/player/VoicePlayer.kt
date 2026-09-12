@@ -17,7 +17,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import voice.core.analytics.api.Analytics
+import androidx.media3.common.MediaMetadata
+import voice.core.common.formatTime
+import voice.core.data.Book
 import voice.core.data.BookContent
+import voice.core.data.store.ShowRemainingTimeStore
+import java.util.concurrent.CopyOnWriteArraySet
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import voice.core.data.BookId
 import voice.core.data.repo.BookRepository
 import voice.core.data.store.AutoRewindAmountStore
@@ -51,6 +58,8 @@ class VoicePlayer(
   private val seekTimeStore: DataStore<Int>,
   @AutoRewindAmountStore
   private val autoRewindAmountStore: DataStore<Int>,
+  @ShowRemainingTimeStore
+  private val showRemainingTimeStore: DataStore<Boolean>,
   private val mediaItemProvider: MediaItemProvider,
   private val scope: CoroutineScope,
   private val volumeGain: VolumeGain,
@@ -58,7 +67,40 @@ class VoicePlayer(
   private val analytics: Analytics,
 ) : ForwardingPlayer(player) {
 
-  private val playerListener = object : Player.Listener {
+  private val listeners = CopyOnWriteArraySet<Player.Listener>()
+  private var dynamicMediaMetadata: MediaMetadata? = null
+  private var timeTickerJob: Job? = null
+  private var cachedBook: Book? = null
+  private var cachedShowRemainingTime: Boolean = true
+
+  override fun addListener(listener: Player.Listener) {
+    super.addListener(listener)
+    listeners.add(listener)
+    dynamicMediaMetadata?.let {
+      try {
+        listener.onMediaMetadataChanged(it)
+      } catch (e: Exception) {
+        Logger.w(e, "Error dispatching onMediaMetadataChanged")
+      }
+    }
+  }
+
+  override fun removeListener(listener: Player.Listener) {
+    super.removeListener(listener)
+    listeners.remove(listener)
+  }
+
+  override fun getMediaMetadata(): MediaMetadata {
+    return dynamicMediaMetadata ?: super.getMediaMetadata()
+  }
+
+  override fun getCurrentMediaItem(): MediaItem? {
+    val item = super.getCurrentMediaItem() ?: return null
+    val meta = dynamicMediaMetadata ?: return item
+    return item.buildUpon().setMediaMetadata(meta).build()
+  }
+
+  internal val playerListener = object : Player.Listener {
     override fun onPositionDiscontinuity(
       oldPosition: Player.PositionInfo,
       newPosition: Player.PositionInfo,
@@ -67,11 +109,44 @@ class VoicePlayer(
       if (reason == DISCONTINUITY_REASON_AUTO_TRANSITION) {
         pauseAndDisableSleepTimerIfEndOfChapter()
       }
+      updateDynamicMetadata()
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {
       if (playbackState == STATE_ENDED) {
         pauseAndDisableSleepTimerIfEndOfChapter()
+      }
+      syncTimeTicker()
+      updateDynamicMetadata()
+    }
+
+    override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+      Logger.d("onPlaybackSuppressionReasonChanged=$playbackSuppressionReason")
+      if (playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_TRANSIENT_AUDIO_FOCUS_LOSS) {
+        triggerAutoRewind()
+      }
+    }
+
+    override fun onPlayWhenReadyChanged(
+      playWhenReady: Boolean,
+      reason: Int,
+    ) {
+      Logger.d("onPlayWhenReadyChanged playWhenReady=$playWhenReady reason=$reason")
+      if (!playWhenReady && (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS || reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY)) {
+        triggerAutoRewind()
+      }
+      syncTimeTicker()
+      updateDynamicMetadata()
+    }
+
+    override fun onMediaItemTransition(
+      mediaItem: MediaItem?,
+      reason: Int,
+    ) {
+      scope.launch {
+        val bookId = currentBookStoreId.data.first()
+        cachedBook = bookId?.let { repo.get(it) }
+        updateDynamicMetadata()
       }
     }
 
@@ -95,6 +170,69 @@ class VoicePlayer(
 
   init {
     player.addListener(playerListener)
+  }
+
+  private fun syncTimeTicker() {
+    val isPlaying = player.playWhenReady && player.playbackState == Player.STATE_READY
+    if (isPlaying) {
+      if (timeTickerJob == null || timeTickerJob?.isActive != true) {
+        timeTickerJob = scope.launch {
+          while (true) {
+            delay(1000)
+            updateDynamicMetadata()
+          }
+        }
+      }
+    } else {
+      timeTickerJob?.cancel()
+      timeTickerJob = null
+    }
+  }
+
+  internal fun updateDynamicMetadata() {
+    val currentItem = player.currentMediaItem ?: return
+    val baseMeta = currentItem.mediaMetadata
+    val book = cachedBook ?: runBlocking {
+      currentBookStoreId.data.first()?.let { repo.get(it) }
+    }?.also { cachedBook = it } ?: return
+    val bookName = book.content.name
+
+    val currentPosMs = player.currentPosition.takeIf { it >= 0L } ?: 0L
+    val durationMs = player.duration.takeIf { it > 0L } ?: baseMeta.durationMs ?: 0L
+    val remainingMs = (durationMs - currentPosMs).coerceAtLeast(0L)
+
+    val showRemaining = runBlocking {
+      try { showRemainingTimeStore.data.first() } catch (_: Exception) { true }
+    }
+
+    val timeFormatted = if (durationMs > 0L) {
+      if (showRemaining) {
+        "${formatTime(currentPosMs, durationMs)} (-${formatTime(remainingMs, durationMs)})"
+      } else {
+        "${formatTime(currentPosMs, durationMs)} / ${formatTime(durationMs, durationMs)}"
+      }
+    } else {
+      formatTime(currentPosMs)
+    }
+
+    val newSubtitle = if (bookName.isNotBlank()) "$timeFormatted • $bookName" else timeFormatted
+
+    if (dynamicMediaMetadata?.subtitle?.toString() == newSubtitle) {
+      return
+    }
+
+    val updatedMetadata = baseMeta.buildUpon()
+      .setSubtitle(newSubtitle)
+      .build()
+
+    dynamicMediaMetadata = updatedMetadata
+    listeners.forEach { listener ->
+      try {
+        listener.onMediaMetadataChanged(updatedMetadata)
+      } catch (e: Exception) {
+        Logger.w(e, "Error dispatching onMediaMetadataChanged")
+      }
+    }
   }
 
   fun forceSeekToNext() {
@@ -220,6 +358,21 @@ class VoicePlayer(
     playWhenReady = true
   }
 
+  private fun triggerAutoRewind() {
+    val currentPosition = player.currentPosition.takeUnless { it == C.TIME_UNSET }?.milliseconds ?: ZERO
+    if (currentPosition > ZERO) {
+      scope.launch {
+        val amount = autoRewindAmountStore.data.first().seconds
+        if (amount > ZERO) {
+          seekBackBy(
+            skipAmount = amount,
+            crossMediaItems = false,
+          )
+        }
+      }
+    }
+  }
+
   override fun setPlayWhenReady(playWhenReady: Boolean) {
     Logger.d("setPlayWhenReady=$playWhenReady")
     analytics.event(if (playWhenReady) "play" else "pause")
@@ -227,15 +380,7 @@ class VoicePlayer(
     if (playWhenReady) {
       updateLastPlayedAt()
     } else {
-      val currentPosition = player.currentPosition.takeUnless { it == C.TIME_UNSET }?.milliseconds ?: ZERO
-      if (currentPosition > ZERO) {
-        scope.launch {
-          seekBackBy(
-            skipAmount = autoRewindAmountStore.data.first().seconds,
-            crossMediaItems = false,
-          )
-        }
-      }
+      triggerAutoRewind()
     }
     super.setPlayWhenReady(playWhenReady)
   }
@@ -310,6 +455,7 @@ class VoicePlayer(
           repo.get(mediaId.id)
         }
         if (book != null) {
+          cachedBook = book
           player.setPlaybackSpeed(book.content.playbackSpeed)
           setSkipSilenceEnabled(book.content.skipSilence)
           volumeGain.gain = Decibel(book.content.gain)
@@ -356,6 +502,13 @@ class VoicePlayer(
     scope.launch {
       updateBook { it.copy(gain = gain.value) }
     }
+  }
+
+  override fun release() {
+    timeTickerJob?.cancel()
+    timeTickerJob = null
+    player.removeListener(playerListener)
+    super.release()
   }
 
   private suspend fun updateBook(update: (BookContent) -> BookContent) {

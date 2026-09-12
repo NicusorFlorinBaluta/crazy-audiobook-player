@@ -17,6 +17,10 @@ class PlayStateDelegatingListener(private val playStateManager: PlayStateManager
     updatePlayState()
   }
 
+  override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+    updatePlayState()
+  }
+
   override fun onPlayWhenReadyChanged(
     playWhenReady: Boolean,
     reason: Int,
@@ -28,7 +32,7 @@ class PlayStateDelegatingListener(private val playStateManager: PlayStateManager
     val playbackState = player.playbackState
     playStateManager.playState = when {
       playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE -> PlayStateManager.PlayState.Paused
-      player.playWhenReady -> PlayStateManager.PlayState.Playing
+      player.playWhenReady && player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE -> PlayStateManager.PlayState.Playing
       else -> PlayStateManager.PlayState.Paused
     }
   }

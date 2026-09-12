@@ -12,6 +12,10 @@ sealed interface MediaId {
   data object Root : MediaId
 
   @Serializable
+  @SerialName("allBooks")
+  data object AllBooks : MediaId
+
+  @Serializable
   @SerialName("book")
   data class Book(val id: BookId) : MediaId
 

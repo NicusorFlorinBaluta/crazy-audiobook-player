@@ -74,6 +74,10 @@ class PositionUpdater(
     flushPosition()
   }
 
+  override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+    flushPosition()
+  }
+
   override fun onPlayWhenReadyChanged(
     playWhenReady: Boolean,
     reason: Int,
