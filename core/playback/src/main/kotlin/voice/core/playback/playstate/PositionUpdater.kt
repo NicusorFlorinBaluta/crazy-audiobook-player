@@ -39,6 +39,8 @@ class PositionUpdater(
 
   private var player: Player? = null
   private var updateJob: Job? = null
+  private var lastRemoteSyncTimeMs: Long = 0L
+  private var remoteSyncJob: Job? = null
 
   fun attachTo(player: Player) {
     this.player?.removeListener(this)
@@ -98,13 +100,13 @@ class PositionUpdater(
     flushPosition()
   }
 
-  private fun flushPosition() {
+  private fun flushPosition(forceRemote: Boolean = true) {
     scope.launch {
-      flushPositionNow()
+      flushPositionNow(forceRemote = forceRemote)
     }
   }
 
-  suspend fun flushPositionNow() {
+  suspend fun flushPositionNow(forceRemote: Boolean = false) {
     val player = player ?: return
     val mediaItem = player.currentMediaItem ?: return
     val currentPosition = player.currentPosition
@@ -122,10 +124,16 @@ class PositionUpdater(
           lastPlayedAt = Instant.now(),
         )
         if (updated.remoteProjectId != null) {
-          scope.launch(Dispatchers.IO) {
-            try {
-              crazySyncManager.syncProgressToServer(updated)
-            } catch (_: Exception) {}
+          val now = System.currentTimeMillis()
+          val shouldSyncRemote = forceRemote || (now - lastRemoteSyncTimeMs >= 15_000L)
+          if (shouldSyncRemote) {
+            lastRemoteSyncTimeMs = now
+            remoteSyncJob?.cancel()
+            remoteSyncJob = scope.launch(Dispatchers.IO) {
+              try {
+                crazySyncManager.syncProgressToServer(updated)
+              } catch (_: Exception) {}
+            }
           }
         }
         updated

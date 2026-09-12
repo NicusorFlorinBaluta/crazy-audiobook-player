@@ -450,9 +450,15 @@ class VoicePlayer(
     Logger.v("setBook(${mediaItem.mediaId})")
     val mediaId = mediaItem.mediaId.toMediaIdOrNull()
     if (mediaId != null) {
-      if (mediaId is MediaId.Book) {
+      val targetBookId = when (mediaId) {
+        is MediaId.Book -> mediaId.id
+        is MediaId.Chapter -> mediaId.bookId
+        is MediaId.ChapterMark -> mediaId.bookId
+        else -> null
+      }
+      if (targetBookId != null) {
         val book = runBlocking {
-          repo.get(mediaId.id)
+          repo.get(targetBookId)
         }
         if (book != null) {
           cachedBook = book
@@ -461,16 +467,32 @@ class VoicePlayer(
           volumeGain.gain = Decibel(book.content.gain)
           val playbackItems = book.playbackItems()
           if (playbackItems.isEmpty()) return
-          val currentPlaybackItem = book.playbackItemForPosition(
-            chapterId = book.content.currentChapter,
-            positionInChapterMs = book.content.positionInChapter,
-          ) ?: playbackItems.first()
+
+          val (targetPlaybackItem, initialPosMs) = when (mediaId) {
+            is MediaId.Chapter -> {
+              val item = playbackItems.find { it.chapter.id == mediaId.chapterId } ?: playbackItems.first()
+              Pair(item, 0L)
+            }
+            is MediaId.ChapterMark -> {
+              val item = playbackItems.find { it.chapter.id == mediaId.chapterId && it.markIndex == mediaId.markIndex }
+                ?: playbackItems.first()
+              Pair(item, 0L)
+            }
+            else -> {
+              val cur = book.playbackItemForPosition(
+                chapterId = book.content.currentChapter,
+                positionInChapterMs = book.content.positionInChapter,
+              ) ?: playbackItems.first()
+              Pair(cur, cur.positionInMediaItem(book.content.positionInChapter))
+            }
+          }
+
           val mediaItems = mediaItemProvider.playbackItems(book)
           if (mediaItems.isNotEmpty()) {
             player.setMediaItems(
               mediaItems,
-              currentPlaybackItem.index.coerceIn(0, mediaItems.size - 1),
-              currentPlaybackItem.positionInMediaItem(book.content.positionInChapter),
+              targetPlaybackItem.index.coerceIn(0, mediaItems.size - 1),
+              initialPosMs,
             )
             player.prepare()
           }

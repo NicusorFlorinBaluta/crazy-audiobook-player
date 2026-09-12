@@ -120,7 +120,31 @@ class MediaItemProvider(
         val book = bookRepository.get(mediaId.id) ?: return null
         mediaItemsWithStartPosition(book)
       }
-      is MediaId.Chapter, is MediaId.ChapterMark, MediaId.Root, MediaId.Recent, MediaId.AllBooks, null -> null
+      is MediaId.Chapter -> {
+        val book = bookRepository.get(mediaId.bookId) ?: return null
+        val playbackItems = book.playbackItems()
+        val targetItem = playbackItems.find { it.chapter.id == mediaId.chapterId }
+          ?: playbackItems.firstOrNull() ?: return null
+        val mediaItems = playbackItems(book)
+        MediaItemsWithStartPosition(
+          mediaItems,
+          targetItem.index.coerceIn(0, mediaItems.size - 1),
+          0L,
+        )
+      }
+      is MediaId.ChapterMark -> {
+        val book = bookRepository.get(mediaId.bookId) ?: return null
+        val playbackItems = book.playbackItems()
+        val targetItem = playbackItems.find { it.chapter.id == mediaId.chapterId && it.markIndex == mediaId.markIndex }
+          ?: playbackItems.firstOrNull() ?: return null
+        val mediaItems = playbackItems(book)
+        MediaItemsWithStartPosition(
+          mediaItems,
+          targetItem.index.coerceIn(0, mediaItems.size - 1),
+          0L,
+        )
+      }
+      MediaId.Root, MediaId.Recent, MediaId.AllBooks, null -> null
     }
   }
 

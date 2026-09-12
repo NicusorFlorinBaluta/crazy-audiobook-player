@@ -88,8 +88,15 @@ class LibrarySessionCallback(
       currentBookStoreId.updateData { searchResult.id }
       mediaItemProvider.mediaItemsWithStartPosition(searchResult)
     } else {
-      (item.mediaId.toMediaIdOrNull() as? MediaId.Book)?.let { bookId ->
-        currentBookStoreId.updateData { bookId.id }
+      val mediaId = item.mediaId.toMediaIdOrNull()
+      val targetBookId = when (mediaId) {
+        is MediaId.Book -> mediaId.id
+        is MediaId.Chapter -> mediaId.bookId
+        is MediaId.ChapterMark -> mediaId.bookId
+        else -> null
+      }
+      if (targetBookId != null) {
+        currentBookStoreId.updateData { targetBookId }
       }
       mediaItemProvider.mediaItemsWithStartPosition(item.mediaId)
     }

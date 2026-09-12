@@ -213,7 +213,12 @@ public class CrazyBookSyncService(
           }
         } else {
           // Fallback for full book stream with embedded chapter marks
-          val streamUrl = "$serverUrl/api/projects/${book.projectId}/stream"
+          val rawFull = book.streamUrl.ifBlank { detail?.streamUrl ?: "" }
+          val streamUrl = if (rawFull.isNotBlank()) {
+            if (rawFull.startsWith("http")) rawFull else "$serverUrl/${rawFull.trimStart('/')}"
+          } else {
+            "$serverUrl/api/projects/${book.projectId}/stream"
+          }
           val chId = ChapterId(streamUrl)
           chapterIds.add(chId)
           val totalDurationMs = (book.totalDurationSeconds * 1000.0).toLong()
