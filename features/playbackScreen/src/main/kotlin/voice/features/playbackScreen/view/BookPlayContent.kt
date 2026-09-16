@@ -41,6 +41,8 @@ internal fun BookPlayContent(
   onUpdateReaderFontSize: (Int) -> Unit,
   onToggleAutoFollow: (Boolean) -> Unit,
   onRetrySync: () -> Unit,
+  onToggleRemainingTime: () -> Unit = {},
+  onFlagIssueClick: () -> Unit = {},
   useLandscapeLayout: Boolean,
 ) {
   if (useLandscapeLayout) {
@@ -62,6 +64,7 @@ internal fun BookPlayContent(
           PlayerDisplayMode.Lyrics -> LyricsView(
             lyricsState = viewState.lyricsState,
             onLineClick = onSeekToLine,
+            onLineFlagClick = { lineId -> onFlagIssueClick() },
             onRetry = onRetrySync,
             modifier = Modifier.fillMaxSize(),
           )
@@ -106,6 +109,8 @@ internal fun BookPlayContent(
           duration = viewState.duration,
           playedTime = viewState.playedTime,
           onSeek = onSeek,
+          showRemainingTime = viewState.showRemainingTime,
+          onToggleRemainingTime = onToggleRemainingTime,
         )
         Spacer(modifier = Modifier.size(16.dp))
         PlaybackRow(
@@ -174,6 +179,8 @@ internal fun BookPlayContent(
         duration = viewState.duration,
         playedTime = viewState.playedTime,
         onSeek = onSeek,
+        showRemainingTime = viewState.showRemainingTime,
+        onToggleRemainingTime = onToggleRemainingTime,
       )
       Spacer(modifier = Modifier.size(12.dp))
       PlaybackRow(

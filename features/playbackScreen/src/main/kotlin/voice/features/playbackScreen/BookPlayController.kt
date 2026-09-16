@@ -43,6 +43,9 @@ fun BookPlayScreen(bookId: BookId) {
         BookPlayViewEffect.BookmarkAdded -> {
           snackbarHostState.showSnackbar(message = bookmarkAddedMessage)
         }
+        is BookPlayViewEffect.PlaybackIssueFlagged -> {
+          snackbarHostState.showSnackbar(message = viewEffect.message)
+        }
         BookPlayViewEffect.RequestIgnoreBatteryOptimization -> {
           val result = snackbarHostState.showSnackbar(
             message = batteryOptimizationMessage,
@@ -70,6 +73,7 @@ fun BookPlayScreen(bookId: BookId) {
     onVolumeBoostClick = viewModel::onVolumeGainIconClick,
     onSpeedChangeClick = viewModel::onPlaybackSpeedIconClick,
     onCloseClick = viewModel::onCloseClick,
+    onFlagIssueClick = { viewModel.flagPlaybackIssue() },
     onSkipToNext = viewModel::next,
     onSkipToPrevious = viewModel::previous,
     onCurrentChapterClick = viewModel::onCurrentChapterClick,
@@ -79,6 +83,7 @@ fun BookPlayScreen(bookId: BookId) {
     onUpdateReaderTheme = viewModel::setReaderTheme,
     onUpdateReaderFontSize = viewModel::setReaderFontSize,
     onToggleAutoFollow = viewModel::toggleAutoFollow,
+    onToggleRemainingTime = viewModel::toggleShowRemainingTime,
     useLandscapeLayout = LocalConfiguration.current.orientation == ORIENTATION_LANDSCAPE,
     snackbarHostState = snackbarHostState,
   )

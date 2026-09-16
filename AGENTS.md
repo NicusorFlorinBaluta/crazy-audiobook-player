@@ -18,6 +18,7 @@
 ## Commands
 
 - Assemble the free debug app: `./gradlew :app:assembleFreeDebug`.
+- Deploy APK to all endpoints: `python scripts/deploy_apk.py` (or `python scripts/deploy_apk.py --build` to compile & deploy in one step).
 - Run all unit tests: `./gradlew voiceUnitTest`.
 - Run unit tests for a library module: `./gradlew :<moduleName>:testDebugUnitTest`.
 - Run app unit tests: `./gradlew :app:testFreeDebugUnitTest`.
@@ -67,3 +68,4 @@
 - The diff is scoped to the requested behavior and does not rewrite unrelated code.
 - New public behavior is covered by tests or clearly justified if not.
 - Instructions in this file stay accurate. Fix stale commands or misleading guidance when found.
+- When generating an APK, NEVER leave it only in Gradle build output: always publish it to all download endpoints (24/7 NAS streamer, Creator root, and Voice root) with `python scripts/deploy_apk.py`.

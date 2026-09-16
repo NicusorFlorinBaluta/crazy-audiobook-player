@@ -120,6 +120,7 @@ class BookPlayViewModelTest {
     experimentalPlaybackPersistenceFeatureFlag = MemoryFeatureFlag(false),
     kioskModeFeatureFlag = MemoryFeatureFlag(false),
     crazySyncManager = mockk(relaxed = true),
+    showRemainingTimeStore = MemoryDataStore(true),
   )
 
   @Test
@@ -426,6 +427,22 @@ class BookPlayViewModelTest {
   }
 
   @Test
+  fun `viewState contains showRemainingTime and toggleShowRemainingTime updates it`() = scope.runTest {
+    val vm = viewModel()
+    backgroundScope.launchMolecule(RecompositionMode.Immediate) {
+      vm.viewState()
+    }.test {
+      skipItems(1) // initial null
+      val initial = awaitItem()!!
+      assertEquals(expected = true, actual = initial.showRemainingTime)
+
+      vm.toggleShowRemainingTime()
+      val updated = awaitItem()!!
+      assertEquals(expected = false, actual = updated.showRemainingTime)
+    }
+  }
+
+  @Test
   fun `viewState switches display modes between Cover, Lyrics, and Reader`() = scope.runTest {
     val crazyBook = book.copy(
       content = book.content.copy(remoteProjectId = "test_project")
@@ -619,6 +636,7 @@ class BookPlayViewModelTest {
       experimentalPlaybackPersistenceFeatureFlag = MemoryFeatureFlag(experimentalPlaybackPersistence),
       kioskModeFeatureFlag = MemoryFeatureFlag(kioskMode),
       crazySyncManager = crazySyncManager,
+      showRemainingTimeStore = MemoryDataStore(true),
     )
   }
 }

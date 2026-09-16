@@ -28,6 +28,7 @@ import voice.core.data.store.CrazyServerUrlStore
 import voice.core.data.store.DeveloperMenuUnlockedStore
 import voice.core.data.store.GridModeStore
 import voice.core.data.store.SeekTimeStore
+import voice.core.data.store.ShowRemainingTimeStore
 import voice.core.data.store.SleepTimerPreferenceStore
 import voice.core.data.store.ThemeColorSchemeStore
 import voice.core.data.store.ThemeModeStore
@@ -69,6 +70,8 @@ class SettingsViewModel(
   private val crazyDownloadWifiOnlyStore: DataStore<Boolean>,
   private val crazySyncManager: CrazySyncManager,
   dispatcherProvider: DispatcherProvider,
+  @ShowRemainingTimeStore
+  private val showRemainingTimeStore: DataStore<Boolean>,
 ) : SettingsListener {
 
   private val mainScope = MainScope(dispatcherProvider)
@@ -97,6 +100,7 @@ class SettingsViewModel(
     }
     val crazyServerUrl by remember { crazyServerUrlStore.data }.collectAsState(initial = "http://192.168.50.44:8000")
     val crazyDownloadWifiOnly by remember { crazyDownloadWifiOnlyStore.data }.collectAsState(initial = true)
+    val showRemainingTime by remember { showRemainingTimeStore.data }.collectAsState(initial = true)
 
     return SettingsViewState(
       themeMode = themeMode,
@@ -123,6 +127,7 @@ class SettingsViewModel(
       kioskMode = kioskMode,
       crazyServerUrl = crazyServerUrl,
       crazyDownloadWifiOnly = crazyDownloadWifiOnly,
+      showRemainingTime = showRemainingTime,
     )
   }
 
@@ -324,6 +329,12 @@ class SettingsViewModel(
   override fun onCrazyDownloadWifiOnlyChange(enabled: Boolean) {
     mainScope.launch {
       crazyDownloadWifiOnlyStore.updateData { enabled }
+    }
+  }
+
+  override fun toggleShowRemainingTime() {
+    mainScope.launch {
+      showRemainingTimeStore.updateData { !it }
     }
   }
 }

@@ -36,6 +36,7 @@ interface SettingsListener {
   fun syncCrazyAudiobooks()
   fun restoreRemovedCrazyAudiobooks()
   fun onCrazyDownloadWifiOnlyChange(enabled: Boolean)
+  fun toggleShowRemainingTime()
 
   companion object {
     fun noop() = object : SettingsListener {
@@ -68,6 +69,7 @@ interface SettingsListener {
       override fun syncCrazyAudiobooks() {}
       override fun restoreRemovedCrazyAudiobooks() {}
       override fun onCrazyDownloadWifiOnlyChange(enabled: Boolean) {}
+      override fun toggleShowRemainingTime() {}
     }
   }
 }

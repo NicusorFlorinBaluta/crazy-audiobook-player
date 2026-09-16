@@ -16,6 +16,7 @@ import voice.core.data.BookContent
 import voice.core.data.BookId
 import voice.core.data.Chapter
 import voice.core.data.ChapterId
+import voice.core.data.chapterNumber
 import voice.core.data.MarkData
 import voice.core.data.repo.BookContentRepo
 import voice.core.data.repo.ChapterRepo
@@ -192,10 +193,11 @@ public class CrazyBookSyncService(
 
             val rawTitle = ch.title.replace(Regex("""^Chapter\s+\d+\s*[:\-–]\s*""", RegexOption.IGNORE_CASE), "").trim()
             val chTitle = rawTitle.ifBlank { "Chapter ${ch.number}" }
+            val markTitle = "${ch.number}::$chTitle"
 
             val marks = listOf(
               MarkData(
-                name = chTitle,
+                name = markTitle,
                 startMs = ch.startMs ?: 0L,
               )
             )
@@ -232,7 +234,8 @@ public class CrazyBookSyncService(
               val dur = ((ch.durationSeconds ?: 0.0) * 1000.0).toLong()
               val startMs = ch.startMs ?: cumMs
               val rawTitle = ch.title.replace(Regex("""^Chapter\s+\d+\s*[:\-–]\s*""", RegexOption.IGNORE_CASE), "").trim()
-              val markTitle = rawTitle.ifBlank { "Chapter ${ch.number}" }
+              val cleanTitle = rawTitle.ifBlank { "Chapter ${ch.number}" }
+              val markTitle = "${ch.number}::$cleanTitle"
               marks.add(MarkData(name = markTitle, startMs = startMs))
               cumMs = (ch.endMs ?: (startMs + if (dur > 0) dur else 60_000L))
             }
@@ -294,10 +297,45 @@ public class CrazyBookSyncService(
           selectedPosition = remotePosInChapter
         }
 
-        // If user already had local progress on this device and that chapter is valid, keep local
-        if (existingContent != null && existingContent.currentChapter in chapterIds && existingContent.positionInChapter > 0L) {
-          selectedCurrentChapter = existingContent.currentChapter
-          selectedPosition = existingContent.positionInChapter
+        // If user already had local progress on this device, keep local or intelligently map it
+        val hasLocalProgress = existingContent != null && (existingContent.positionInChapter > 0L || existingContent.currentChapterIndex > 0)
+        val effectiveChapters = if (isDownloaded && existingContent.chapters.isNotEmpty()) {
+          existingContent.chapters
+        } else {
+          chapterIds
+        }
+
+        if (hasLocalProgress) {
+          val current = existingContent
+          if (isDownloaded && current.currentChapter in effectiveChapters) {
+            selectedCurrentChapter = current.currentChapter
+            selectedPosition = current.positionInChapter
+          } else if (current.currentChapter in chapterIds) {
+            selectedCurrentChapter = current.currentChapter
+            selectedPosition = current.positionInChapter
+          } else {
+            // Re-map local progress across deliveries / chapter streaming changes
+            val oldChapterObj = chapterRepo.get(current.currentChapter)
+            val oldMark = oldChapterObj?.chapterMarks?.find { current.positionInChapter in it.startMs..it.endMs }
+              ?: oldChapterObj?.chapterMarks?.firstOrNull()
+            val localChNum = oldMark?.chapterNumber ?: (current.currentChapterIndex + 1)
+            val localRelPos = if (oldMark != null) (current.positionInChapter - oldMark.startMs).coerceAtLeast(0L) else current.positionInChapter
+
+            if (publishedDeliveries.isNotEmpty()) {
+              val delivIdx = publishedDeliveries.indexOfFirst { localChNum in it.chapters }
+              if (delivIdx in chapterIds.indices) {
+                selectedCurrentChapter = chapterIds[delivIdx]
+                val deliv = publishedDeliveries[delivIdx]
+                val chDetail = deliv.chapterDetails.find { it.number == localChNum }
+                val baseStartMs = chDetail?.startMs ?: 0L
+                selectedPosition = baseStartMs + localRelPos
+              }
+            } else if (validChapters.isNotEmpty()) {
+              val chIdx = (localChNum - 1).coerceIn(chapterIds.indices)
+              selectedCurrentChapter = chapterIds[chIdx]
+              selectedPosition = localRelPos
+            }
+          }
         }
 
         val bookTitle = (detail?.title ?: book.title).ifBlank { "Unknown Title" }
@@ -316,7 +354,7 @@ public class CrazyBookSyncService(
           author = bookAuthor,
           name = bookTitle,
           addedAt = existingContent?.addedAt ?: Instant.now(),
-          chapters = chapterIds,
+          chapters = effectiveChapters,
           currentChapter = selectedCurrentChapter,
           positionInChapter = selectedPosition,
           cover = coverFile,
@@ -384,7 +422,7 @@ public class CrazyBookSyncService(
     if (currentChapterObj != null && currentChapterObj.chapterMarks.isNotEmpty()) {
       val mark = currentChapterObj.chapterMarks.find { bookContent.positionInChapter in it.startMs..it.endMs }
         ?: currentChapterObj.chapterMarks.first()
-      val mNum = Regex("""Chapter\s+(\d+)""", RegexOption.IGNORE_CASE).find(mark.name ?: "")?.groupValues?.get(1)?.toIntOrNull()
+      val mNum = mark.chapterNumber
       if (mNum != null) {
         trueChapterNumber = mNum
         posInTrueChapter = (bookContent.positionInChapter - mark.startMs).coerceAtLeast(0L)
@@ -554,17 +592,26 @@ public class CrazyBookSyncService(
         }
       }
 
+      val currentChapterObj = chapterRepo.get(content.currentChapter)
+      val mark = currentChapterObj?.chapterMarks?.find { content.positionInChapter in it.startMs..it.endMs }
+      val targetChNum = mark?.chapterNumber ?: (content.currentChapterIndex + 1)
+      val targetIdx = (targetChNum - 1).coerceIn(localChapterIds.indices)
+      val targetLocalChapter = localChapterIds.getOrNull(targetIdx) ?: localChapterIds.firstOrNull() ?: content.currentChapter
+      val relPos = if (mark != null) (content.positionInChapter - mark.startMs).coerceAtLeast(0L) else content.positionInChapter
+
       val updatedContent = content.copy(
         isDownloaded = true,
         isRemoteStream = false,
         chapters = localChapterIds,
-        currentChapter = localChapterIds.firstOrNull() ?: content.currentChapter,
+        currentChapter = targetLocalChapter,
+        positionInChapter = relPos,
       )
       bookContentRepo.put(updatedContent)
 
       // Pre-cache lyrics & reader for all chapters for complete offline reading experience
       onProgress(0.95f, "Caching synchronized lyrics and reader for offline reading...")
-      for (ch in validChapters) {
+      val allChaptersToCache = if (detail.chapters.isNotEmpty()) detail.chapters else validChapters
+      for (ch in allChaptersToCache) {
         try {
           val lRes = getChapterLyrics(projectId, ch.number, forceRefresh = true)
           if (lRes.isSuccess) Unit
@@ -683,6 +730,39 @@ public class CrazyBookSyncService(
         }
         throw e
       }
+    }
+  }
+
+  override suspend fun flagPlaybackIssue(
+    bookId: BookId,
+    chapterNumber: Int,
+    positionMs: Long,
+    issueType: String,
+    userNote: String,
+    source: String,
+    lineId: String?,
+  ): Result<CrazyPlaybackFlagDto> = withContext(Dispatchers.IO) {
+    runCatching {
+      val content = bookContentRepo.get(bookId)
+      val projectId = content?.remoteProjectId ?: bookId.value.removePrefix("crazy://")
+      var rawUrl = serverUrlStore.data.first().trim()
+      val serverUrl = (if (rawUrl.startsWith("http")) rawUrl else "http://$rawUrl").removeSuffix("/")
+      val api = clientFactory.create(serverUrl)
+
+      val req = CrazyPlaybackFlagRequest(
+        chapterNumber = chapterNumber,
+        positionMs = positionMs,
+        issueType = issueType,
+        userNote = userNote,
+        source = source,
+        lineId = lineId,
+      )
+
+      val resp = api.flagPlaybackIssue(projectId, req)
+      if (!resp.isSuccessful || resp.body() == null) {
+        throw IllegalStateException("Failed to flag playback issue: HTTP ${resp.code()}")
+      }
+      resp.body()!!.flag
     }
   }
 }

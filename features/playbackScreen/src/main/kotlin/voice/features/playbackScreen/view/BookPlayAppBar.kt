@@ -30,6 +30,7 @@ internal fun BookPlayAppBar(
   onSkipSilenceClick: () -> Unit,
   onVolumeBoostClick: () -> Unit,
   onCloseClick: () -> Unit,
+  onFlagIssueClick: () -> Unit = {},
   useLandscapeLayout: Boolean,
 ) {
   val appBarActions: @Composable RowScope.() -> Unit = {
@@ -43,6 +44,14 @@ internal fun BookPlayAppBar(
         imageVector = sleepTimerIcon,
         contentDescription = stringResource(id = R.string.sleep_timer_action_open),
       )
+    }
+    if (viewState.isCrazyBook) {
+      IconButton(onClick = onFlagIssueClick) {
+        Icon(
+          imageVector = VoiceIcons.Flag,
+          contentDescription = stringResource(id = R.string.playback_action_flag_issue_content_description),
+        )
+      }
     }
     Box(
       modifier = Modifier

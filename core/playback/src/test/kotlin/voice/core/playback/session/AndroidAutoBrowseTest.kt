@@ -150,6 +150,8 @@ class AndroidAutoBrowseTest {
       currentBookStoreId = currentBookStore,
       bookRepository = bookRepo,
       showRemainingTimeStore = showRemainingTimeStore,
+      crazySyncManager = mockk(relaxed = true),
+      context = context,
     )
 
     val session = mockk<MediaLibraryService.MediaLibrarySession>()
@@ -163,5 +165,108 @@ class AndroidAutoBrowseTest {
 
     assertNotNull(result.value)
     assertEquals(expected = MediaId.Root, actual = result.value!!.mediaId.toMediaIdOrNull())
+  }
+
+  @Test
+  fun `onConnect exposes flag action in secondary slot and custom layout to Android Auto`() = runTest {
+    val syncManager = mockk<voice.core.data.remote.CrazySyncManager>(relaxed = true)
+    val callback = LibrarySessionCallback(
+      mediaItemProvider = mediaItemProvider,
+      scope = CoroutineScope(Dispatchers.Unconfined),
+      player = mockk(relaxed = true),
+      bookSearchParser = mockk(relaxed = true),
+      bookSearchHandler = mockk(relaxed = true),
+      currentBookStoreId = currentBookStore,
+      bookRepository = bookRepo,
+      showRemainingTimeStore = showRemainingTimeStore,
+      crazySyncManager = syncManager,
+      context = context,
+    )
+
+    val session = mockk<androidx.media3.session.MediaLibraryService.MediaLibrarySession>(relaxed = true)
+    val controller = mockk<androidx.media3.session.MediaSession.ControllerInfo> {
+      every { packageName } returns "com.google.android.projection.gearhead"
+      every { connectionHints } returns android.os.Bundle.EMPTY
+    }
+
+    val result = callback.onConnect(session, controller)
+    assertNotNull(result)
+
+    // Verify custom session command voice.action.FLAG_PLAYBACK_ISSUE is available
+    val hasFlagCommand = result.availableSessionCommands.contains(
+      androidx.media3.session.SessionCommand(CustomCommand.CUSTOM_ACTION_FLAG_ISSUE, android.os.Bundle.EMPTY)
+    )
+    assertTrue(hasFlagCommand, "Android Auto connection must include CUSTOM_ACTION_FLAG_ISSUE command")
+
+    // Verify custom layout contains flag button
+    val customLayout = result.customLayout
+    assertNotNull(customLayout)
+    assertEquals(1, customLayout.size)
+    val flagBtn = customLayout.first()
+    assertEquals(CustomCommand.CUSTOM_ACTION_FLAG_ISSUE, flagBtn.sessionCommand?.customAction)
+    assertTrue(flagBtn.slots.contains(androidx.media3.session.CommandButton.SLOT_FORWARD), "Flag button must have SLOT_FORWARD for Android Auto small layout")
+
+    // Verify mediaButtonPreferences has rewind, flag, and fast forward
+    val mediaButtons = result.mediaButtonPreferences
+    assertNotNull(mediaButtons)
+    assertEquals(3, mediaButtons.size)
+    val slotForwardPrimary = mediaButtons.find { it.slots.contains(androidx.media3.session.CommandButton.SLOT_FORWARD) }
+    assertNotNull(slotForwardPrimary, "Media button preferences must contain primary forward slot button for flag")
+    assertEquals(CustomCommand.CUSTOM_ACTION_FLAG_ISSUE, slotForwardPrimary.sessionCommand?.customAction)
+    val slotForwardSec = mediaButtons.find { it.slots.contains(androidx.media3.session.CommandButton.SLOT_FORWARD_SECONDARY) && it.playerCommand == androidx.media3.common.Player.COMMAND_SEEK_FORWARD }
+    assertNotNull(slotForwardSec, "Media button preferences must contain secondary forward slot button for fast forward")
+  }
+
+  @Test
+  fun `onCustomCommand with CUSTOM_ACTION_FLAG_ISSUE flags issue with android_auto source`() = runTest {
+    val syncManager = mockk<voice.core.data.remote.CrazySyncManager> {
+      coEvery {
+        flagPlaybackIssue(
+          bookId = any(),
+          chapterNumber = any(),
+          positionMs = any(),
+          issueType = any(),
+          userNote = any(),
+          source = any(),
+          lineId = any(),
+        )
+      } returns Result.success(mockk(relaxed = true))
+    }
+
+    val callback = LibrarySessionCallback(
+      mediaItemProvider = mediaItemProvider,
+      scope = CoroutineScope(Dispatchers.Unconfined),
+      player = mockk(relaxed = true),
+      bookSearchParser = mockk(relaxed = true),
+      bookSearchHandler = mockk(relaxed = true),
+      currentBookStoreId = currentBookStore,
+      bookRepository = bookRepo,
+      showRemainingTimeStore = showRemainingTimeStore,
+      crazySyncManager = syncManager,
+      context = context,
+    )
+
+    val session = mockk<androidx.media3.session.MediaLibraryService.MediaLibrarySession>(relaxed = true)
+    val controller = mockk<androidx.media3.session.MediaSession.ControllerInfo> {
+      every { packageName } returns "com.google.android.projection.gearhead"
+      every { connectionHints } returns android.os.Bundle.EMPTY
+    }
+
+    val command = androidx.media3.session.SessionCommand(CustomCommand.CUSTOM_ACTION_FLAG_ISSUE, android.os.Bundle.EMPTY)
+    val resultFuture = callback.onCustomCommand(session, controller, command, android.os.Bundle.EMPTY)
+    val result = resultFuture.get()
+
+    assertEquals(androidx.media3.session.SessionResult.RESULT_SUCCESS, result.resultCode)
+    io.mockk.coVerify {
+      @Suppress("UNUSED_VARIABLE")
+      val unused = syncManager.flagPlaybackIssue(
+        bookId = currentBookId,
+        chapterNumber = 1,
+        positionMs = 50_000L,
+        issueType = "wrong_speaker",
+        userNote = "",
+        source = "android_auto",
+      )
+    }
   }
 }

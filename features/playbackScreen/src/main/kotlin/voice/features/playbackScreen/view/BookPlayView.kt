@@ -30,6 +30,7 @@ internal fun BookPlayView(
   onSkipToPrevious: () -> Unit,
   onCloseClick: () -> Unit,
   onCurrentChapterClick: () -> Unit,
+  onFlagIssueClick: () -> Unit = {},
   onDisplayModeChange: (PlayerDisplayMode) -> Unit = {},
   onSeekToLine: (Long) -> Unit = {},
   onSeekToParagraph: (Long) -> Unit = {},
@@ -37,6 +38,7 @@ internal fun BookPlayView(
   onUpdateReaderFontSize: (Int) -> Unit = {},
   onToggleAutoFollow: (Boolean) -> Unit = {},
   onRetrySync: () -> Unit = {},
+  onToggleRemainingTime: () -> Unit = {},
   snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
   Scaffold(
@@ -53,6 +55,7 @@ internal fun BookPlayView(
         onSkipSilenceClick = onSkipSilenceClick,
         onVolumeBoostClick = onVolumeBoostClick,
         onCloseClick = onCloseClick,
+        onFlagIssueClick = onFlagIssueClick,
         useLandscapeLayout = useLandscapeLayout,
       )
     },
@@ -75,6 +78,8 @@ internal fun BookPlayView(
         onUpdateReaderFontSize = onUpdateReaderFontSize,
         onToggleAutoFollow = onToggleAutoFollow,
         onRetrySync = onRetrySync,
+        onToggleRemainingTime = onToggleRemainingTime,
+        onFlagIssueClick = onFlagIssueClick,
         useLandscapeLayout = useLandscapeLayout,
       )
     },

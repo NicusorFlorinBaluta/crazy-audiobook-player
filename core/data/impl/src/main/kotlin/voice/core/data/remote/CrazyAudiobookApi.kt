@@ -44,4 +44,15 @@ public interface CrazyAudiobookApi {
     @Path("projectId") projectId: String,
     @Path("chapterNum") chapterNum: Int,
   ): Response<CrazyChapterReaderDto>
+
+  @POST("api/mobile/v1/books/{projectId}/flags")
+  public suspend fun flagPlaybackIssue(
+    @Path("projectId") projectId: String,
+    @Body request: CrazyPlaybackFlagRequest,
+  ): Response<CrazyPlaybackFlagResponse>
+
+  @GET("api/mobile/v1/books/{projectId}/flags")
+  public suspend fun getPlaybackFlags(
+    @Path("projectId") projectId: String,
+  ): Response<CrazyPlaybackFlagsResponse>
 }

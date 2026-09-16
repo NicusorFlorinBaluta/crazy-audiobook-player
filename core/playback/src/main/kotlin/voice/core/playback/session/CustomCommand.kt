@@ -25,7 +25,18 @@ internal sealed interface CustomCommand {
   @Serializable
   data object ToggleRemainingTime : CustomCommand
 
+  @Serializable
+  data class FlagPlaybackIssue(
+    val bookId: String? = null,
+    val chapterNumber: Int? = null,
+    val positionMs: Long? = null,
+    val issueType: String = "wrong_speaker",
+    val note: String = "",
+  ) : CustomCommand
+
   companion object {
+    const val CUSTOM_ACTION_FLAG_ISSUE = "voice.action.FLAG_PLAYBACK_ISSUE"
+
 
     const val CUSTOM_COMMAND_ACTION = "voiceCommandAction"
     internal const val CUSTOM_COMMAND_EXTRA = "voiceCommandExtra"

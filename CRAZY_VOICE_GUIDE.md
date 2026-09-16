@@ -52,8 +52,18 @@
 - **Inline Artwork Delivery (`artworkData`)**: Attached directly via `MediaMetadata.Builder.setArtworkData()`, delivering crisp cover art across the MediaSession IPC binder directly to Android Auto cards without encountering cross-process `FileProvider` permission blocks.
 - **Extended Projection Permissions**: `ImageFileProvider` pre-authorizes all standard Android Auto and Automotive projection hosts (`com.google.android.projection.gearhead`, `com.google.android.gms`, `com.android.bluetooth`, `com.google.android.apps.automotive.templates.host`).
 - **Robust Path Mapping**: `cover_paths.xml` declares `path="."` and `path="crazy_covers"` for full FileProvider compatibility.
+- **Primary Forward Slot for Quick Flagging**: In `LibrarySessionCallback.kt` and `PlaybackModule.kt`, the custom 🚩 Flag button is registered to `CommandButton.SLOT_FORWARD`, guaranteeing its presence on compact split-screen cards and head-unit widgets beside Play/Pause.
 
-### 8. 24/7 Two-Way Progress Synchronization
+### 8. In-Car & Mobile Playback Issue Flagging
+- **One-Tap In-Car Flagging**: While driving, tap the 🚩 Flag button directly on the Android Auto dashboard media card to instantly log audio defects, misattributions, or pronunciation errors.
+- **In-App Mobile Flagging**:
+  - **Top App Bar**: Dedicated 🚩 Flag action in the player top bar flags the currently playing chapter position.
+  - **Lyrics View Line Tap**: Tapping or long-pressing lines in the synchronized script viewer allows pinpointing the exact dialogue line.
+- **Reaction Delay Window Compensation**: The Creator backend automatically captures a 20-second window preceding the tap (`[position_ms - 20000, position_ms + 2000]`), extracting all candidate spoken lines and manuscript text so driver/listener reaction lag never obscures the faulty sentence.
+- **Toast Feedback**: Instant visual confirmation on phone or auto display showing chapter and timestamp (e.g. `Playback issue flagged at Ch 3, 00:15`).
+- **Instant Backend Sync**: Dispatches to `/api/mobile/v1/books/{id}/flags` on the NAS Streamer or Creator workstation for automated AI diagnosis and dashboard review.
+
+### 9. 24/7 Two-Way Progress Synchronization
 - Persists chapter number, millisecond offset, playback speed, and completion status to `/api/mobile/v1/books/{id}/progress` in real time.
 - Backed by `/mnt/nas/media/crazybooks/{projectId}/progress.json` on the NAS for continuous 24/7 availability across devices.
 - Works seamlessly across both streaming and offline playback modes.
@@ -68,8 +78,27 @@ The compiled Android application (`Voice-CrazyAudiobook-debug.apk`) is continuou
 | :--- | :--- | :--- |
 | **24/7 NAS Remote Streamer** | Primary 24/7 remote download (always online) | `https://<username>:<password>@crazyha.mywire.org/bookplayer/Voice-CrazyAudiobook-debug.apk` <br>*(or browse to `https://crazyha.mywire.org/bookplayer/Voice-CrazyAudiobook-debug.apk` and enter basic auth credentials)* |
 | **Creator PC Direct** | Workstation direct download endpoint | `http://192.168.50.44:8000/api/mobile/v1/app` |
-| **Local Project Root** | Copied to Creator repository root | `e:\Projects\crazy-audiobook-creator\Voice-CrazyAudiobook-debug.apk` |
+| **Local Project Root (Creator)** | Copied to Creator repository root | `e:\Projects\crazy-audiobook-creator\Voice-CrazyAudiobook-debug.apk` |
+| **Local Project Root (Voice)** | Copied to Voice repository root | `E:\Projects\Voice\Voice-CrazyAudiobook-debug.apk` |
 | **Android Build Output** | Compiled from Voice repository | `E:\Projects\Voice\app\build\outputs\apk\free\debug\app-free-debug.apk` |
+
+### Continuous Publishing Workflow
+
+Whenever an updated APK is generated:
+1. **Never leave it solely in the Gradle build output** (`app/build/outputs/apk/free/debug/app-free-debug.apk`).
+2. **Publish immediately to all distribution endpoints** using the deployment script:
+   ```bash
+   # From Voice repo:
+   python scripts/deploy_apk.py
+
+   # Or compile and deploy in one command:
+   python scripts/deploy_apk.py --build
+   ```
+3. The script automatically:
+   - Copies the build artifact to `E:\Projects\Voice\Voice-CrazyAudiobook-debug.apk` and `e:\Projects\crazy-audiobook-creator\Voice-CrazyAudiobook-debug.apk`.
+   - Uploads via SFTP directly to the 24/7 NAS storage `/mnt/nas/media/crazybooks/Voice-CrazyAudiobook-debug.apk` on `192.168.50.180`.
+   - Syncs into the `crazy-bookplayer-streamer` container.
+   - Verifies HTTP `200 OK` / `206 Partial Content` on both the remote streamer (`https://crazyha.mywire.org/bookplayer/Voice-CrazyAudiobook-debug.apk`) and local Creator API (`http://192.168.50.44:8000/api/mobile/v1/app`).
 
 ---
 

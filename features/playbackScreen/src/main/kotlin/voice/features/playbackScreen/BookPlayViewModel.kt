@@ -29,6 +29,7 @@ import voice.core.data.repo.BookRepository
 import voice.core.data.repo.BookmarkRepo
 import voice.core.data.sleeptimer.SleepTimerPreference
 import voice.core.data.store.CurrentBookStore
+import voice.core.data.store.ShowRemainingTimeStore
 import voice.core.data.store.SleepTimerPreferenceStore
 import voice.core.featureflag.ExperimentalPlaybackPersistenceQualifier
 import voice.core.featureflag.FeatureFlag
@@ -75,6 +76,8 @@ class BookPlayViewModel(
   @KioskModeFeatureFlagQualifier
   private val kioskModeFeatureFlag: FeatureFlag<Boolean>,
   private val crazySyncManager: CrazySyncManager,
+  @ShowRemainingTimeStore
+  private val showRemainingTimeStore: DataStore<Boolean>,
   @Assisted
   private val bookId: BookId,
 ) {
@@ -100,6 +103,47 @@ class BookPlayViewModel(
     scope.launch {
       player.pauseIfCurrentBookDifferentFrom(bookId)
       currentBookStoreId.updateData { bookId }
+    }
+  }
+
+  fun flagPlaybackIssue(
+    issueType: String = "wrong_speaker",
+    userNote: String = "",
+    lineId: String? = null,
+  ) {
+    scope.launch {
+      val book = currentBook() ?: return@launch
+      val currentMark = book.currentChapter.markForPosition(book.content.positionInChapter)
+      val chapterNumber = currentMark.chapterNumber ?: (book.content.currentChapterIndex + 1)
+      val positionInChapter = if (currentMark.durationMs > 0) {
+        book.content.positionInChapter - currentMark.startMs
+      } else {
+        book.content.positionInChapter
+      }
+
+      val flagResult = runCatching {
+        crazySyncManager.flagPlaybackIssue(
+          bookId = book.id,
+          chapterNumber = chapterNumber,
+          positionMs = positionInChapter,
+          issueType = issueType,
+          userNote = userNote,
+          source = if (lineId != null) "lyrics_view" else "phone",
+          lineId = lineId,
+        )
+      }
+      Logger.d("Flagged playback issue from phone/lyrics: $flagResult")
+
+      val totalSec = positionInChapter / 1000
+      val mm = totalSec / 60
+      val ss = totalSec % 60
+      val timeStr = String.format("%02d:%02d", mm, ss)
+      val msg = if (flagResult.isSuccess) {
+        "Issue flagged at Ch $chapterNumber, $timeStr"
+      } else {
+        "Flagging failed: ${flagResult.exceptionOrNull()?.message ?: "Check server"}"
+      }
+      viewEffects.emit(BookPlayViewEffect.PlaybackIssueFlagged(msg))
     }
   }
 
@@ -249,6 +293,7 @@ class BookPlayViewModel(
 
     val sleepTime = remember { sleepTimer.state }.collectAsState().value
     val hasMoreThanOneChapter = book.chapters.sumOf { it.chapterMarks.count() } > 1
+    val showRemainingTime by remember { showRemainingTimeStore.data }.collectAsState(initial = true)
     return BookPlayViewState(
       sleepTimerState = sleepTime.toViewState(),
       playing = isPlaying,
@@ -266,6 +311,7 @@ class BookPlayViewModel(
       lyricsState = currentLyrics,
       readerState = currentReader,
       isCrazyBook = isCrazyBook,
+      showRemainingTime = showRemainingTime,
     )
   }
 
@@ -289,7 +335,14 @@ class BookPlayViewModel(
       lyricsState = null,
       readerState = null,
       isCrazyBook = false,
+      showRemainingTime = true,
     )
+  }
+
+  fun toggleShowRemainingTime() {
+    scope.launch {
+      showRemainingTimeStore.updateData { !it }
+    }
   }
 
   fun dismissDialog() {

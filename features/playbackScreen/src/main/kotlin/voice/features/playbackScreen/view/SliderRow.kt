@@ -1,5 +1,6 @@
 package voice.features.playbackScreen.view
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,8 @@ internal fun SliderRow(
   duration: Duration,
   playedTime: Duration,
   onSeek: (Duration) -> Unit,
+  showRemainingTime: Boolean = true,
+  onToggleRemainingTime: () -> Unit = {},
 ) {
   Row(
     modifier = Modifier
@@ -61,11 +64,21 @@ internal fun SliderRow(
         onSeek(duration * localValue.toDouble())
       },
     )
+    val remainingMs = if (dragging) {
+      (duration * (1.0 - localValue.toDouble())).inWholeMilliseconds.coerceAtLeast(0L)
+    } else {
+      (duration - playedTime).inWholeMilliseconds.coerceAtLeast(0L)
+    }
     Text(
-      text = formatTime(
-        timeMs = duration.inWholeMilliseconds,
-        durationMs = duration.inWholeMilliseconds,
-      ),
+      modifier = Modifier.clickable(onClick = onToggleRemainingTime),
+      text = if (showRemainingTime) {
+        "-${formatTime(timeMs = remainingMs, durationMs = duration.inWholeMilliseconds)}"
+      } else {
+        formatTime(
+          timeMs = duration.inWholeMilliseconds,
+          durationMs = duration.inWholeMilliseconds,
+        )
+      },
     )
   }
 }

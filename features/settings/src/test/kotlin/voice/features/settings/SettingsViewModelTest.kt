@@ -57,6 +57,7 @@ class SettingsViewModelTest {
   private val dynamicColorAvailability = mockk<DynamicColorAvailability> {
     every { isSupported() } returns true
   }
+  private val showRemainingTimeStore = MemoryDataStore(true)
 
   private val viewModel = SettingsViewModel(
     themeModeStore = themeModeStore,
@@ -76,7 +77,22 @@ class SettingsViewModelTest {
     crazyDownloadWifiOnlyStore = MemoryDataStore(true),
     crazySyncManager = mockk(relaxed = true),
     dispatcherProvider = DispatcherProvider(scope.coroutineContext, scope.coroutineContext, scope.coroutineContext),
+    showRemainingTimeStore = showRemainingTimeStore,
   )
+
+  @Test
+  fun `view state contains showRemainingTime and toggleShowRemainingTime updates it`() = scope.runTest {
+    backgroundScope.launchMolecule(RecompositionMode.Immediate) {
+      viewModel.viewState()
+    }.test {
+      val initial = awaitItem()
+      assertEquals(expected = true, actual = initial.showRemainingTime)
+
+      viewModel.toggleShowRemainingTime()
+      val updated = awaitItem()
+      assertEquals(expected = false, actual = updated.showRemainingTime)
+    }
+  }
 
   @Test
   fun `view state defaults to follow system and voice blue`() = scope.runTest {

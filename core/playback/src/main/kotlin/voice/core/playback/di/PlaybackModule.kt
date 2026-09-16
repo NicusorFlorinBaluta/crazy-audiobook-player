@@ -164,6 +164,7 @@ interface PlaybackModule {
   @SingleIn(PlaybackScope::class)
   fun scope(): CoroutineScope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
 
+  @Suppress("DEPRECATION")
   @Provides
   @SingleIn(PlaybackScope::class)
   fun session(
@@ -185,10 +186,16 @@ interface PlaybackModule {
             .setPlayerCommand(Player.COMMAND_SEEK_BACK)
             .setSlots(CommandButton.SLOT_BACK)
             .build(),
+          CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+            .setIconResId(voice.core.playback.R.drawable.ic_flag)
+            .setDisplayName(context.getString(StringsR.string.playback_action_flag_issue))
+            .setSessionCommand(androidx.media3.session.SessionCommand(voice.core.playback.session.CustomCommand.CUSTOM_ACTION_FLAG_ISSUE, android.os.Bundle.EMPTY))
+            .setSlots(CommandButton.SLOT_FORWARD, CommandButton.SLOT_FORWARD_SECONDARY)
+            .build(),
           CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD)
             .setDisplayName(context.getString(StringsR.string.playback_action_fast_forward))
             .setPlayerCommand(Player.COMMAND_SEEK_FORWARD)
-            .setSlots(CommandButton.SLOT_FORWARD)
+            .setSlots(CommandButton.SLOT_FORWARD_SECONDARY, CommandButton.SLOT_OVERFLOW)
             .build(),
         ),
       )

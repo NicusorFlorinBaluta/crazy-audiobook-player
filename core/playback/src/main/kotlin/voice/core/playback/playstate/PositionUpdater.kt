@@ -116,10 +116,16 @@ class PositionUpdater(
     val chapterId = mediaId.realChapterId ?: return
     val positionInChapter = mediaId.positionInChapter(currentPosition) ?: return
     bookRepo.updateBook(bookId) { content ->
-      if (chapterId in content.chapters) {
-        Logger.d("$positionInChapter is the new position!")
+      val resolvedChapterId = when {
+        chapterId in content.chapters -> chapterId
+        else -> content.chapters.firstOrNull {
+          it.value.substringAfterLast("/") == chapterId.value.substringAfterLast("/")
+        }
+      }
+      if (resolvedChapterId != null) {
+        Logger.d("$positionInChapter is the new position in $resolvedChapterId!")
         val updated = content.copy(
-          currentChapter = chapterId,
+          currentChapter = resolvedChapterId,
           positionInChapter = positionInChapter,
           lastPlayedAt = Instant.now(),
         )

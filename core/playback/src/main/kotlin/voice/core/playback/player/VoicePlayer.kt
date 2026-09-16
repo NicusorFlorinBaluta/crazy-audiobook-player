@@ -410,19 +410,19 @@ class VoicePlayer(
     mediaItem: MediaItem,
     startPositionMs: Long,
   ) {
-    setBook(mediaItem)
+    setBook(mediaItem, explicitStartPositionMs = startPositionMs.takeUnless { it == C.TIME_UNSET })
   }
 
   override fun setMediaItem(
     mediaItem: MediaItem,
     resetPosition: Boolean,
   ) {
-    setBook(mediaItem)
+    setBook(mediaItem, resetPosition = resetPosition)
   }
 
   override fun setMediaItems(mediaItems: List<MediaItem>) {
     val first = mediaItems.firstOrNull() ?: return
-    setBook(first)
+    setBook(first, explicitMediaItems = mediaItems)
   }
 
   override fun setMediaItems(
@@ -430,7 +430,7 @@ class VoicePlayer(
     resetPosition: Boolean,
   ) {
     val first = mediaItems.firstOrNull() ?: return
-    setBook(first)
+    setBook(first, explicitMediaItems = mediaItems, resetPosition = resetPosition)
   }
 
   override fun setMediaItem(mediaItem: MediaItem) {
@@ -442,12 +442,25 @@ class VoicePlayer(
     startIndex: Int,
     startPositionMs: Long,
   ) {
-    val first = mediaItems.firstOrNull() ?: return
-    setBook(first)
+    if (mediaItems.isEmpty()) return
+    val targetIndex = if (startIndex != C.INDEX_UNSET && startIndex in mediaItems.indices) startIndex else 0
+    val targetItem = mediaItems.getOrNull(targetIndex) ?: mediaItems.first()
+    setBook(
+      targetItem,
+      explicitMediaItems = mediaItems,
+      explicitStartIndex = startIndex.takeUnless { it == C.INDEX_UNSET },
+      explicitStartPositionMs = startPositionMs.takeUnless { it == C.TIME_UNSET },
+    )
   }
 
-  private fun setBook(mediaItem: MediaItem) {
-    Logger.v("setBook(${mediaItem.mediaId})")
+  private fun setBook(
+    mediaItem: MediaItem,
+    explicitMediaItems: List<MediaItem>? = null,
+    explicitStartIndex: Int? = null,
+    explicitStartPositionMs: Long? = null,
+    resetPosition: Boolean = false,
+  ) {
+    Logger.v("setBook(${mediaItem.mediaId}, startIndex=$explicitStartIndex, startPos=$explicitStartPositionMs)")
     val mediaId = mediaItem.mediaId.toMediaIdOrNull()
     if (mediaId != null) {
       val targetBookId = when (mediaId) {
@@ -468,15 +481,22 @@ class VoicePlayer(
           val playbackItems = book.playbackItems()
           if (playbackItems.isEmpty()) return
 
-          val (targetPlaybackItem, initialPosMs) = when (mediaId) {
-            is MediaId.Chapter -> {
-              val item = playbackItems.find { it.chapter.id == mediaId.chapterId } ?: playbackItems.first()
-              Pair(item, 0L)
+          val (targetPlaybackItem, initialPosMs) = when {
+            explicitStartIndex != null -> {
+              val item = playbackItems.getOrNull(explicitStartIndex) ?: playbackItems.first()
+              Pair(item, explicitStartPositionMs ?: 0L)
             }
-            is MediaId.ChapterMark -> {
+            resetPosition -> {
+              Pair(playbackItems.first(), 0L)
+            }
+            mediaId is MediaId.Chapter -> {
+              val item = playbackItems.find { it.chapter.id == mediaId.chapterId } ?: playbackItems.first()
+              Pair(item, explicitStartPositionMs ?: 0L)
+            }
+            mediaId is MediaId.ChapterMark -> {
               val item = playbackItems.find { it.chapter.id == mediaId.chapterId && it.markIndex == mediaId.markIndex }
                 ?: playbackItems.first()
-              Pair(item, 0L)
+              Pair(item, explicitStartPositionMs ?: 0L)
             }
             else -> {
               val cur = book.playbackItemForPosition(
@@ -487,7 +507,7 @@ class VoicePlayer(
             }
           }
 
-          val mediaItems = mediaItemProvider.playbackItems(book)
+          val mediaItems = explicitMediaItems ?: mediaItemProvider.playbackItems(book)
           if (mediaItems.isNotEmpty()) {
             player.setMediaItems(
               mediaItems,

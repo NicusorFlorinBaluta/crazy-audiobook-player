@@ -157,6 +157,28 @@
     <string name="onboarding.welcome.title">Welcome to Voice!</string>
     <!-- Label for the playback action that skips forward. -->
     <string name="playback.action.fast_forward">Fast forward</string>
+    <!-- Label for the action to flag a playback issue. -->
+    <string name="playback.action.flag_issue">Flag Issue</string>
+    <!-- Content description for flagging a playback or attribution issue. -->
+    <string name="playback.action.flag_issue_content_description">Flag a playback or attribution issue</string>
+    <!-- Confirmation message when an issue is flagged. -->
+    <string name="playback.flag.toast_success">Playback issue flagged at %s</string>
+    <!-- Title for the flag issue dialog/sheet. -->
+    <string name="playback.flag.dialog_title">Flag Playback Issue</string>
+    <!-- Category for wrong speaker attribution. -->
+    <string name="playback.flag.type.wrong_speaker">Wrong Speaker / Voice</string>
+    <!-- Category for audio glitch or cutoff. -->
+    <string name="playback.flag.type.audio_glitch">Audio Glitch / Cutoff</string>
+    <!-- Category for pronunciation issues. -->
+    <string name="playback.flag.type.pronunciation">Pronunciation</string>
+    <!-- Category for pacing or long silence issues. -->
+    <string name="playback.flag.type.pacing">Pacing / Silence</string>
+    <!-- Category for other issues. -->
+    <string name="playback.flag.type.other">Other</string>
+    <!-- Hint for flag note text field. -->
+    <string name="playback.flag.note_hint">Describe what sounded off (optional)</string>
+    <!-- Action label to add details after quick flag. -->
+    <string name="playback.flag.action_details">Details</string>
     <!-- Content description for a playback button that pauses audio. -->
     <string name="playback.action.pause">Pause</string>
     <!-- Content description for a playback button that starts audio. -->
@@ -238,6 +260,10 @@
     <string name="settings.playback.auto_rewind.title">Auto rewind</string>
     <!-- Title for the setting that controls skip-forward and rewind duration. -->
     <string name="settings.playback.seek_time.title">Skip amount</string>
+    <!-- Title for setting to show remaining chapter time instead of total duration -->
+    <string name="settings.playback.show_remaining_time.title">Show remaining chapter time</string>
+    <!-- Summary for setting to show remaining chapter time instead of total duration -->
+    <string name="settings.playback.show_remaining_time.summary">Display remaining time instead of total duration on the playback bar</string>
     <!-- Settings support row for opening the FAQ. -->
     <string name="settings.support.faq.title">FAQ</string>
     <!-- Settings support row for getting help. -->

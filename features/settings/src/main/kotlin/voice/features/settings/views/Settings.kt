@@ -220,6 +220,30 @@ private fun Settings(
       }
 
       item {
+        ListItem(
+          modifier = Modifier.clickable { listener.toggleShowRemainingTime() },
+          leadingContent = {
+            Icon(
+              imageVector = VoiceIcons.HourglassEmpty,
+              contentDescription = stringResource(StringsR.string.settings_playback_show_remaining_time_title),
+            )
+          },
+          headlineContent = {
+            Text(stringResource(StringsR.string.settings_playback_show_remaining_time_title))
+          },
+          supportingContent = {
+            Text(stringResource(StringsR.string.settings_playback_show_remaining_time_summary))
+          },
+          trailingContent = {
+            Switch(
+              checked = viewState.showRemainingTime,
+              onCheckedChange = { listener.toggleShowRemainingTime() },
+            )
+          },
+        )
+      }
+
+      item {
         AutoSleepTimerCard(viewState.autoSleepTimer, listener)
       }
 

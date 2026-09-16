@@ -41,6 +41,18 @@ class ChapterMarkDisplayTitleTest {
   }
 
   @Test
+  fun `chapterNumber parses leading digit with colon notation`() {
+    val mark = ChapterMark(name = "1: Uncle Wulfgar", startMs = 0, endMs = 40_000)
+    assertEquals(expected = 1, actual = mark.chapterNumber)
+  }
+
+  @Test
+  fun `chapterNumber parses leading digit with hyphen notation`() {
+    val mark = ChapterMark(name = "3 - Unexpected Advantages", startMs = 0, endMs = 40_000)
+    assertEquals(expected = 3, actual = mark.chapterNumber)
+  }
+
+  @Test
   fun `chapterNumber parses standard chapter digits`() {
     val mark = ChapterMark(name = "Chapter 14", startMs = 0, endMs = 40_000)
     assertEquals(expected = "Chapter 14", actual = mark.displayTitle)

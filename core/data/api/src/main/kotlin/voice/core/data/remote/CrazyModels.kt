@@ -147,3 +147,39 @@ public data class CrazyChapterReaderDto(
   @SerialName("total_paragraphs") val totalParagraphs: Int = 0,
   val paragraphs: List<CrazyReaderParagraphDto> = emptyList(),
 )
+@Serializable
+public data class CrazyPlaybackFlagRequest(
+  @SerialName("chapter_number") val chapterNumber: Int,
+  @SerialName("position_ms") val positionMs: Long,
+  @SerialName("issue_type") val issueType: String = "wrong_speaker",
+  @SerialName("user_note") val userNote: String = "",
+  val source: String = "phone",
+  @SerialName("line_id") val lineId: String? = null,
+)
+
+@Serializable
+public data class CrazyPlaybackFlagResponse(
+  val status: String,
+  val flag: CrazyPlaybackFlagDto,
+)
+
+@Serializable
+public data class CrazyPlaybackFlagsResponse(
+  @SerialName("project_id") val projectId: String,
+  @SerialName("total_flags") val totalFlags: Int,
+  val flags: List<CrazyPlaybackFlagDto>,
+)
+
+@Serializable
+public data class CrazyPlaybackFlagDto(
+  @SerialName("flag_id") val flagId: String,
+  @SerialName("project_id") val projectId: String,
+  @SerialName("chapter_number") val chapterNumber: Int,
+  @SerialName("position_ms") val positionMs: Long,
+  val source: String = "phone",
+  @SerialName("issue_type") val issueType: String = "wrong_speaker",
+  @SerialName("user_note") val userNote: String = "",
+  @SerialName("line_id") val lineId: String? = null,
+  val status: String = "pending",
+  @SerialName("created_at") val createdAt: String = "",
+)

@@ -57,6 +57,52 @@ object VoiceIcons {
    * Source: https://fonts.gstatic.com/render/v1/Material+Symbols+Outlined/24dp/analytics.kt?var=opsz,wght,FILL,GRAD,ROND@24,400,0,0,50
    * Generated: 2026-06-20T11:13:08Z
    */
+  val Flag: ImageVector =
+    ImageVector.Builder(
+      name = "Flag",
+      defaultWidth = 24.dp,
+      defaultHeight = 24.dp,
+      viewportWidth = 24f,
+      viewportHeight = 24f,
+    )
+      .apply {
+        path(
+          fill = SolidColor(Color.Black),
+          fillAlpha = 1f,
+          stroke = null,
+          strokeAlpha = 1f,
+          strokeLineWidth = 1f,
+          strokeLineCap = StrokeCap.Butt,
+          strokeLineJoin = StrokeJoin.Bevel,
+          strokeLineMiter = 1f,
+          pathFillType = PathFillType.NonZero,
+        ) {
+          moveTo(14.4f, 6f)
+          lineTo(14f, 4f)
+          horizontalLineTo(5f)
+          verticalLineToRelative(17f)
+          horizontalLineToRelative(2f)
+          verticalLineToRelative(-7f)
+          horizontalLineToRelative(5.6f)
+          lineToRelative(0.4f, 2f)
+          horizontalLineToRelative(7f)
+          verticalLineTo(6f)
+          horizontalLineTo(14.4f)
+          close()
+          moveTo(18f, 14f)
+          horizontalLineToRelative(-4.4f)
+          lineToRelative(-0.4f, -2f)
+          horizontalLineTo(7f)
+          verticalLineTo(6f)
+          horizontalLineToRelative(5.4f)
+          lineToRelative(0.4f, 2f)
+          horizontalLineTo(18f)
+          verticalLineTo(14f)
+          close()
+        }
+      }
+      .build()
+
   val Analytics: ImageVector =
     ImageVector.Builder(
       name = "Analytics",

@@ -21,6 +21,7 @@ data class SettingsViewState(
   val kioskMode: Boolean,
   val crazyServerUrl: String = "http://192.168.50.44:8000",
   val crazyDownloadWifiOnly: Boolean = true,
+  val showRemainingTime: Boolean = true,
 ) {
 
   enum class Dialog {
@@ -50,6 +51,7 @@ data class SettingsViewState(
         kioskMode = false,
         crazyServerUrl = "http://192.168.50.44:8000",
         crazyDownloadWifiOnly = true,
+        showRemainingTime = true,
       )
     }
   }

@@ -58,6 +58,10 @@ public val ChapterMark.chapterNumber: Int?
     if (raw.contains("::")) {
       return raw.substringBefore("::").trim().toIntOrNull()
     }
-    return Regex("""(?:ch\.|chapter)\s*(\d+)""", RegexOption.IGNORE_CASE)
+    val chRegex = Regex("""(?:ch\.|chapter)\s*(\d+)""", RegexOption.IGNORE_CASE)
+      .find(raw)?.groupValues?.get(1)?.toIntOrNull()
+    if (chRegex != null) return chRegex
+
+    return Regex("""^\s*(\d+)\s*[:\-–]""")
       .find(raw)?.groupValues?.get(1)?.toIntOrNull()
   }

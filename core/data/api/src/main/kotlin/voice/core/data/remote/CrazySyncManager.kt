@@ -12,4 +12,13 @@ public interface CrazySyncManager {
   public suspend fun deleteDownloadedAudio(bookId: BookId): Result<Unit>
   public suspend fun getChapterLyrics(projectId: String, chapterNumber: Int, forceRefresh: Boolean = false): Result<CrazyChapterLyricsDto>
   public suspend fun getChapterReader(projectId: String, chapterNumber: Int, forceRefresh: Boolean = false): Result<CrazyChapterReaderDto>
+  public suspend fun flagPlaybackIssue(
+    bookId: BookId,
+    chapterNumber: Int,
+    positionMs: Long,
+    issueType: String = "wrong_speaker",
+    userNote: String = "",
+    source: String = "phone",
+    lineId: String? = null,
+  ): Result<CrazyPlaybackFlagDto>
 }

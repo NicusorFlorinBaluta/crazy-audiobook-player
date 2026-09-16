@@ -57,6 +57,7 @@ import kotlin.math.max
 internal fun LyricsView(
   lyricsState: LyricsViewState?,
   onLineClick: (Long) -> Unit,
+  onLineFlagClick: ((String) -> Unit)? = null,
   onRetry: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -162,6 +163,7 @@ internal fun LyricsView(
           isActive = isActive,
           isPast = isPast,
           onClick = { onLineClick(line.startMs) },
+          onFlagClick = onLineFlagClick?.let { flagCb -> { flagCb(line.lineId) } },
         )
       }
     }
@@ -205,6 +207,7 @@ private fun LyricsLineItem(
   isActive: Boolean,
   isPast: Boolean,
   onClick: () -> Unit,
+  onFlagClick: (() -> Unit)? = null,
   modifier: Modifier = Modifier,
 ) {
   val contentAlpha = when {
@@ -264,6 +267,21 @@ private fun LyricsLineItem(
             fontSize = 11.sp,
             fontWeight = FontWeight.Normal,
           )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+        if (onFlagClick != null) {
+          androidx.compose.material3.IconButton(
+            onClick = onFlagClick,
+            modifier = Modifier.size(24.dp),
+          ) {
+            Icon(
+              imageVector = VoiceIcons.Flag,
+              contentDescription = "Flag this line",
+              tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isActive) 0.8f else 0.4f),
+              modifier = Modifier.size(16.dp),
+            )
+          }
         }
       }
 
